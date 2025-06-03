@@ -42,7 +42,8 @@ describe('MQTT Client Module', function() {
     // Create a fresh instance of the module under test
     mqttClient = proxyquire('../src/mqtt-client', {
       'mqtt': mqttMock,
-      './logger': loggerMock
+      './logger': loggerMock,
+      './config': { config }
     });
     
     // Reset any state
