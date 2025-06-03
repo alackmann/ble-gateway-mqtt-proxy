@@ -9,9 +9,20 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha test/**/*.test.js",
+    "test:watch": "mocha test/**/*.test.js --watch",
+    "test:coverage": "nyc mocha test/**/*.test.js",
+    "test:debug": "LOG_LEVEL=debug mocha test/**/*.test.js",
+    "lint": "echo 'Linting not yet configured'",
+    "prebuild": "npm test"
   },
-  "keywords": ["ble", "bluetooth", "gateway", "mqtt", "april-brother"],
+  "keywords": [
+    "ble",
+    "bluetooth",
+    "gateway",
+    "mqtt",
+    "april-brother"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -19,5 +30,10 @@
     "express": "^5.1.0",
     "mqtt": "^5.13.0",
     "msgpack5": "^6.0.2"
+  },
+  "devDependencies": {
+    "chai": "^5.2.0",
+    "mocha": "^11.5.0",
+    "supertest": "^7.1.1"
   }
 }

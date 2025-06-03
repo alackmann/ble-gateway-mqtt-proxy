@@ -5,13 +5,10 @@
 
 const express = require('express');
 const msgpack = require('msgpack5')();
-const { config, logConfigStatus } = require('./config');
+const { config } = require('./config');
+const logger = require('./logger');
 
 const app = express();
-
-// Basic startup logging
-console.log('BLE Gateway Data Processor starting...');
-logConfigStatus();
 
 // Middleware to parse raw request bodies for MessagePack and JSON
 app.use('/tokendata', express.raw({ 
@@ -29,11 +26,11 @@ app.post('/tokendata', (req, res) => {
         const sourceIP = req.ip || req.connection.remoteAddress;
         
         // Log incoming request
-        console.log(`Received request from ${sourceIP} with Content-Type: ${contentType}`);
+        logger.logRequest('POST', '/tokendata', contentType, sourceIP, req.body?.length || 0);
         
         // Validate Content-Type
         if (!contentType || (!contentType.includes('application/msgpack') && !contentType.includes('application/json'))) {
-            console.warn(`Invalid Content-Type: ${contentType}`);
+            logger.warn(`Invalid Content-Type: ${contentType}`, { sourceIP });
             return res.status(400).json({ 
                 error: 'Content-Type must be application/msgpack or application/json' 
             });
@@ -41,28 +38,71 @@ app.post('/tokendata', (req, res) => {
         
         // Validate request body exists
         if (!req.body || req.body.length === 0) {
-            console.warn('Empty request body received');
+            logger.warn('Empty request body received', { sourceIP });
             return res.status(400).json({ 
                 error: 'Request body is required' 
             });
         }
         
-        console.log(`Processing ${req.body.length} bytes of data`);
+        logger.debug(`Processing ${req.body.length} bytes of data`);
         
-        // TODO: Implement request body decoding (Task 4)
-        // TODO: Implement gateway data parsing (Task 6)
-        // TODO: Implement BLE device parsing (Task 7)
-        // TODO: Implement JSON transformation (Task 8)
-        // TODO: Implement MQTT publishing (Task 10)
+        // Task 5: Implement request body decoding
+        let decodedData;
         
-        // For now, just log that we received the data and return success
-        console.log('Data received successfully (processing not yet implemented)');
+        try {
+            if (contentType.includes('application/msgpack')) {
+                logger.debug('Decoding MessagePack data...');
+                decodedData = msgpack.decode(req.body);
+                logger.debug('MessagePack data decoded successfully');
+            } else if (contentType.includes('application/json')) {
+                logger.debug('Parsing JSON data...');
+                decodedData = JSON.parse(req.body.toString());
+                logger.debug('JSON data parsed successfully');
+            }
+            
+            // Log decoded data structure for verification (without full content for large payloads)
+            const dataKeys = Object.keys(decodedData || {});
+            logger.debug('Decoded data keys', { keys: dataKeys });
+            
+            const deviceCount = decodedData.devices && Array.isArray(decodedData.devices) ? decodedData.devices.length : 0;
+            if (deviceCount > 0) {
+                logger.info(`Found ${deviceCount} devices in payload`);
+            }
+            
+            // Log top-level gateway information if present
+            const gatewayInfo = {
+                version: decodedData.v,
+                messageId: decodedData.mid,
+                ip: decodedData.ip,
+                mac: decodedData.mac
+            };
+            logger.debug('Gateway info', gatewayInfo);
+            
+        } catch (decodeError) {
+            logger.logProcessingError('request body decoding', decodeError, { 
+                contentType, 
+                sourceIP, 
+                bodyLength: req.body.length 
+            });
+            return res.status(400).json({
+                error: 'Invalid request body format',
+                details: decodeError.message
+            });
+        }
+        
+        // TODO: Implement gateway data parsing (Task 7)
+        // TODO: Implement BLE device parsing (Task 8)
+        // TODO: Implement JSON transformation (Task 9)
+        // TODO: Implement MQTT publishing (Task 11)
+        
+        // For now, just log that we received and decoded the data successfully
+        logger.info('Data received and decoded successfully');
         
         // Return 204 No Content as specified in the technical spec
         res.status(204).send();
         
     } catch (error) {
-        console.error('Error processing request:', error);
+        logger.logProcessingError('request processing', error);
         res.status(500).json({ 
             error: 'Internal server error' 
         });
@@ -84,7 +124,12 @@ app.get('/health', (req, res) => {
  * Global error handler
  */
 app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
+    logger.error('Unhandled error', { 
+        error: error.message, 
+        stack: error.stack,
+        url: req.url,
+        method: req.method
+    });
     res.status(500).json({ 
         error: 'Internal server error' 
     });
@@ -94,6 +139,9 @@ app.use((error, req, res, next) => {
  * Handle 404 for all other routes (must be last)
  */
 app.use((req, res) => {
+    logger.warn(`404 - Endpoint not found: ${req.method} ${req.path}`, { 
+        sourceIP: req.ip || req.connection.remoteAddress 
+    });
     res.status(404).json({ 
         error: 'Endpoint not found' 
     });
@@ -101,7 +149,7 @@ app.use((req, res) => {
 
 // Start the HTTP server
 app.listen(config.server.port, () => {
-    console.log(`BLE Gateway Data Processor listening on port ${config.server.port}`);
-    console.log(`POST endpoint available at: http://localhost:${config.server.port}/tokendata`);
-    console.log(`Health check available at: http://localhost:${config.server.port}/health`);
+    logger.logStartup(config.server.port);
+    logger.info(`POST endpoint available at: http://localhost:${config.server.port}/tokendata`);
+    logger.info(`Health check available at: http://localhost:${config.server.port}/health`);
 });
