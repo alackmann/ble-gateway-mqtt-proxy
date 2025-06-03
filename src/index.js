@@ -1,9 +1,5 @@
 /**
- const express = require('express');
-const msgpack = require('msgpack5')();
-const config = require('./config');
-const logger = require('./logger');
-const gatewayParser = require('./gateway-parser');E Gateway Data Processor
+ * BLE Gateway Data Processor
  * Main entry point for the application
  */
 
@@ -11,6 +7,8 @@ const express = require('express');
 const msgpack = require('msgpack5')();
 const { config } = require('./config');
 const logger = require('./logger');
+const gatewayParser = require('./gateway-parser');
+const deviceParser = require('./device-parser');
 
 const app = express();
 
@@ -126,13 +124,50 @@ app.post('/tokendata', (req, res) => {
             deviceCount: parsedData.deviceCount
         });
         
-        // TODO: Implement BLE device parsing (Task 8)
+        // Task 8: Parse raw BLE device data from 'devices' array
+        const deviceParsingResult = deviceParser.parseDevices(parsedData.devices);
+        
+        // Log device parsing results
+        if (deviceParsingResult.errorCount > 0) {
+            logger.warn('Some devices failed to parse', {
+                totalDevices: deviceParsingResult.totalCount,
+                successfulDevices: deviceParsingResult.successCount,
+                failedDevices: deviceParsingResult.errorCount,
+                errors: deviceParsingResult.errors
+            });
+        }
+        
+        if (deviceParsingResult.successCount === 0 && deviceParsingResult.totalCount > 0) {
+            logger.error('All device parsing failed', { 
+                totalDevices: deviceParsingResult.totalCount,
+                errors: deviceParsingResult.errors
+            });
+            return res.status(400).json({ 
+                error: 'Failed to parse any device data',
+                details: 'All devices in the array had parsing errors'
+            });
+        }
+        
+        // Log successful device parsing
+        logger.info('Device parsing completed', {
+            totalDevices: deviceParsingResult.totalCount,
+            successfulDevices: deviceParsingResult.successCount,
+            failedDevices: deviceParsingResult.errorCount
+        });
+        
+        // Get device statistics for logging
+        if (deviceParsingResult.devices.length > 0) {
+            const deviceStats = deviceParser.getDeviceStatistics(deviceParsingResult.devices);
+            logger.debug('Device statistics', deviceStats);
+        }
+        
         // TODO: Implement JSON transformation (Task 9)
         // TODO: Implement MQTT publishing (Task 11)
         
-        // For now, just log that we processed the gateway data successfully
-        logger.logProcessingSuccess('gateway data processing', {
-            deviceCount: parsedData.deviceCount,
+        // For now, just log that we processed the data successfully
+        logger.logProcessingSuccess('complete data processing', {
+            gatewayDeviceCount: parsedData.deviceCount,
+            parsedDeviceCount: deviceParsingResult.successCount,
             gatewayMac: parsedData.gatewayInfo.mac
         });
         
