@@ -10,6 +10,7 @@ const logger = require('./logger');
 const gatewayParser = require('./gateway-parser');
 const deviceParser = require('./device-parser');
 const jsonTransformer = require('./json-transformer');
+const mqttClient = require('./mqtt-client');
 
 const app = express();
 
@@ -23,7 +24,7 @@ app.use('/tokendata', express.raw({
  * POST /tokendata - Main endpoint for receiving BLE gateway data
  * Accepts both application/msgpack and application/json content types
  */
-app.post('/tokendata', (req, res) => {
+app.post('/tokendata', async (req, res) => {
     try {
         const contentType = req.get('Content-Type');
         const sourceIP = req.ip || req.connection.remoteAddress;
@@ -209,16 +210,57 @@ app.post('/tokendata', (req, res) => {
                 logger.debug('JSON payload statistics', jsonStats);
             }
             
-            // TODO: Implement MQTT publishing (Task 11)
-            // For now, log the number of JSON payloads ready for publishing
-            logger.info('JSON payloads ready for MQTT publishing', {
-                payloadCount: jsonTransformResult.payloads.length,
-                firstDeviceMac: jsonTransformResult.payloads[0]?.mac_address,
-                gatewayInfo: {
-                    mac: gatewayMetadata.mac,
-                    ip: gatewayMetadata.ip
+            // Task 11: Implement MQTT publishing
+            if (jsonTransformResult.payloads.length > 0) {
+                try {
+                    logger.info('Publishing device data to MQTT broker', {
+                        payloadCount: jsonTransformResult.payloads.length,
+                        firstDeviceMac: jsonTransformResult.payloads[0]?.mac_address,
+                        gatewayInfo: {
+                            mac: gatewayMetadata.mac,
+                            ip: gatewayMetadata.ip
+                        }
+                    });
+                    
+                    // Publish all JSON payloads to MQTT
+                    const mqttResults = await mqttClient.publishMultipleDeviceData(jsonTransformResult.payloads);
+                    
+                    // Log MQTT publishing results
+                    if (mqttResults.errorCount > 0) {
+                        logger.warn('Some MQTT publications failed', {
+                            totalPayloads: mqttResults.totalCount,
+                            successfulPublications: mqttResults.successCount,
+                            failedPublications: mqttResults.errorCount,
+                            errors: mqttResults.errors
+                        });
+                    }
+                    
+                    if (mqttResults.successCount === 0 && mqttResults.totalCount > 0) {
+                        logger.error('All MQTT publications failed', {
+                            totalPayloads: mqttResults.totalCount,
+                            errors: mqttResults.errors
+                        });
+                        // Note: We don't return an error response here as the data was processed successfully
+                        // MQTT publishing failures are logged but don't affect the HTTP response
+                    } else {
+                        logger.info('MQTT publishing completed successfully', {
+                            totalPayloads: mqttResults.totalCount,
+                            successfulPublications: mqttResults.successCount,
+                            failedPublications: mqttResults.errorCount
+                        });
+                    }
+                    
+                } catch (mqttError) {
+                    logger.error('MQTT publishing failed with exception', {
+                        error: mqttError.message,
+                        payloadCount: jsonTransformResult.payloads.length
+                    });
+                    // Note: We don't return an error response here as the data was processed successfully
+                    // MQTT publishing failures are logged but don't affect the HTTP response
                 }
-            });
+            } else {
+                logger.info('No JSON payloads to publish to MQTT');
+            }
         } else {
             logger.info('No devices to transform - skipping JSON transformation');
         }
@@ -279,9 +321,28 @@ app.use((req, res) => {
     });
 });
 
+// Initialize MQTT client connection
+async function initializeApplication() {
+    try {
+        logger.info('Initializing MQTT client connection...');
+        await mqttClient.initializeMqttClient();
+        logger.info('MQTT client connected successfully');
+    } catch (error) {
+        logger.error('Failed to initialize MQTT client', {
+            error: error.message,
+            brokerUrl: config.mqtt.brokerUrl
+        });
+        logger.warn('Application will continue without MQTT connectivity');
+        logger.warn('MQTT publishing will fail until connection is established');
+    }
+}
+
 // Start the HTTP server
-app.listen(config.server.port, () => {
+app.listen(config.server.port, async () => {
     logger.logStartup(config.server.port);
     logger.info(`POST endpoint available at: http://localhost:${config.server.port}/tokendata`);
     logger.info(`Health check available at: http://localhost:${config.server.port}/health`);
+    
+    // Initialize MQTT connection after server starts
+    await initializeApplication();
 });
