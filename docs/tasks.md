@@ -9,7 +9,7 @@ This task list outlines the development steps for the BLE Gateway Data Processor
     *   **Description:** Develop the mechanism to read all required configuration parameters (HTTP port, MQTT broker URL, credentials, topic prefix) from environment variables. Implement support for a `.env` file for easy local development, ensuring environment variables take precedence.
 
 3.  **Task: Develop Basic HTTP Ingestion Endpoint**
-    *   **Description:** Create an Express.js HTTP server that listens on the configured port. Implement a POST endpoint at the root (`/`) capable of receiving raw request bodies for `application/msgpack` and `application/json` content types as specified in FR-001.
+    *   **Description:** Create an Express.js HTTP server that listens on the configured port. Implement a POST endpoint at the root (`/tokendata`) capable of receiving raw request bodies for `application/msgpack` and `application/json` content types as specified in FR-001.
 
 4.  **Task: Implement Request Body Decoding**
     *   **Description:** Within the HTTP endpoint, add logic to check the `Content-Type` header. Decode `application/msgpack` bodies using the chosen library and parse `application/json` bodies. Initially, log the decoded data to verify successful ingestion (FR-002).
