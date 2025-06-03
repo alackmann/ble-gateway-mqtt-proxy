@@ -9,6 +9,7 @@ const { config } = require('./config');
 const logger = require('./logger');
 const gatewayParser = require('./gateway-parser');
 const deviceParser = require('./device-parser');
+const jsonTransformer = require('./json-transformer');
 
 const app = express();
 
@@ -161,8 +162,66 @@ app.post('/tokendata', (req, res) => {
             logger.debug('Device statistics', deviceStats);
         }
         
-        // TODO: Implement JSON transformation (Task 9)
-        // TODO: Implement MQTT publishing (Task 11)
+        // Task 9: Transform parsed device data to JSON payload
+        if (deviceParsingResult.successCount > 0) {
+            const gatewayMetadata = gatewayParser.getGatewayMetadata(parsedData.gatewayInfo);
+            const transformOptions = {
+                gatewayMac: gatewayMetadata.mac,
+                gatewayIp: gatewayMetadata.ip
+            };
+            
+            const jsonTransformResult = jsonTransformer.transformDevicesToJson(
+                deviceParsingResult.devices, 
+                transformOptions
+            );
+            
+            // Log transformation results
+            if (jsonTransformResult.errorCount > 0) {
+                logger.warn('Some devices failed JSON transformation', {
+                    totalDevices: jsonTransformResult.totalCount,
+                    successfulTransformations: jsonTransformResult.successCount,
+                    failedTransformations: jsonTransformResult.errorCount,
+                    errors: jsonTransformResult.errors
+                });
+            }
+            
+            if (jsonTransformResult.successCount === 0) {
+                logger.error('All JSON transformations failed', { 
+                    totalDevices: jsonTransformResult.totalCount,
+                    errors: jsonTransformResult.errors
+                });
+                return res.status(500).json({ 
+                    error: 'Failed to transform device data to JSON format',
+                    details: 'All devices failed JSON transformation'
+                });
+            }
+            
+            // Log successful JSON transformation
+            logger.info('JSON transformation completed', {
+                totalDevices: jsonTransformResult.totalCount,
+                successfulTransformations: jsonTransformResult.successCount,
+                failedTransformations: jsonTransformResult.errorCount
+            });
+            
+            // Get JSON statistics for logging
+            if (jsonTransformResult.payloads.length > 0) {
+                const jsonStats = jsonTransformer.getJsonStatistics(jsonTransformResult.payloads);
+                logger.debug('JSON payload statistics', jsonStats);
+            }
+            
+            // TODO: Implement MQTT publishing (Task 11)
+            // For now, log the number of JSON payloads ready for publishing
+            logger.info('JSON payloads ready for MQTT publishing', {
+                payloadCount: jsonTransformResult.payloads.length,
+                firstDeviceMac: jsonTransformResult.payloads[0]?.mac_address,
+                gatewayInfo: {
+                    mac: gatewayMetadata.mac,
+                    ip: gatewayMetadata.ip
+                }
+            });
+        } else {
+            logger.info('No devices to transform - skipping JSON transformation');
+        }
         
         // For now, just log that we processed the data successfully
         logger.logProcessingSuccess('complete data processing', {

@@ -1,5 +1,6 @@
 {
   "timeout": 5000,
   "reporter": "spec",
-  "recursive": true
+  "recursive": true,
+  "require": ["test/setup.js"]
 }
