@@ -34,6 +34,7 @@
   "devDependencies": {
     "chai": "^5.2.0",
     "mocha": "^11.5.0",
+    "sinon": "^20.0.0",
     "supertest": "^7.1.1"
   }
 }

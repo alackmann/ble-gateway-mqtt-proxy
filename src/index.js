@@ -1,5 +1,9 @@
 /**
- * BLE Gateway Data Processor
+ const express = require('express');
+const msgpack = require('msgpack5')();
+const config = require('./config');
+const logger = require('./logger');
+const gatewayParser = require('./gateway-parser');E Gateway Data Processor
  * Main entry point for the application
  */
 
@@ -90,13 +94,47 @@ app.post('/tokendata', (req, res) => {
             });
         }
         
-        // TODO: Implement gateway data parsing (Task 7)
+        logger.logProcessingStart('parsing gateway data', { 
+            contentType,
+            dataSize: Buffer.isBuffer(decodedData) ? decodedData.length : 
+                      typeof decodedData === 'string' ? decodedData.length : 
+                      JSON.stringify(decodedData).length
+        });
+        
+        // Task 7: Parse top-level gateway data structure
+        const parsedData = gatewayParser.parseGatewayData(decodedData);
+        const validation = gatewayParser.validateGatewayData(parsedData.gatewayInfo);
+        
+        // Log validation warnings
+        if (validation.warnings.length > 0) {
+            logger.warn('Gateway data validation warnings', { warnings: validation.warnings });
+        }
+        
+        // Log errors and reject if data is invalid
+        if (!validation.isValid) {
+            logger.error('Gateway data validation failed', { errors: validation.errors });
+            return res.status(400).json({ 
+                error: 'Invalid gateway data',
+                details: validation.errors
+            });
+        }
+        
+        // Log gateway information and device count
+        const formattedGatewayInfo = gatewayParser.formatGatewayInfo(parsedData.gatewayInfo);
+        logger.info('Gateway data parsed successfully', {
+            gateway: formattedGatewayInfo,
+            deviceCount: parsedData.deviceCount
+        });
+        
         // TODO: Implement BLE device parsing (Task 8)
         // TODO: Implement JSON transformation (Task 9)
         // TODO: Implement MQTT publishing (Task 11)
         
-        // For now, just log that we received and decoded the data successfully
-        logger.info('Data received and decoded successfully');
+        // For now, just log that we processed the gateway data successfully
+        logger.logProcessingSuccess('gateway data processing', {
+            deviceCount: parsedData.deviceCount,
+            gatewayMac: parsedData.gatewayInfo.mac
+        });
         
         // Return 204 No Content as specified in the technical spec
         res.status(204).send();

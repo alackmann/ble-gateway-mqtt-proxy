@@ -39,6 +39,37 @@ function createMockGatewayData(overrides = {}) {
         ]
     };
 
+    // Handle deviceCount parameter
+    if (overrides.deviceCount !== undefined) {
+        const deviceCount = overrides.deviceCount;
+        if (deviceCount === 0) {
+            defaultData.devices = [];
+        } else if (deviceCount > defaultData.devices.length) {
+            // Add more devices if needed
+            const additionalDevices = deviceCount - defaultData.devices.length;
+            for (let i = 0; i < additionalDevices; i++) {
+                defaultData.devices.push(Buffer.from([
+                    0x02, // Different advertising type
+                    0xAA + i, 0xBB + i, 0xCC + i, 0xDD + i, 0xEE + i, 0xFF, // Different MAC
+                    0xA0 + i, // Different RSSI
+                    0x02, 0x01, 0x1E, // Advertisement data
+                    0x03, 0x03, 0x20 + i, 0x18, // Different service UUID
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // Padding
+                ]));
+            }
+        } else if (deviceCount < defaultData.devices.length) {
+            // Reduce devices if needed
+            defaultData.devices = defaultData.devices.slice(0, deviceCount);
+        }
+        delete overrides.deviceCount; // Remove from overrides so it doesn't override the devices array
+    }
+
+    // Handle includeOptionalFields parameter
+    if (overrides.includeOptionalFields) {
+        defaultData.iccid = '1234567890123456789';
+        delete overrides.includeOptionalFields; // Remove from overrides
+    }
+
     return { ...defaultData, ...overrides };
 }
 
