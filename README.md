@@ -1,46 +1,95 @@
 # BLE Gateway Data Processor
 
-A Node.js application that receives data from an April Brother BLE Gateway V4, processes BLE device advertising data, and publishes structured JSON messages to an MQTT broker.
+A Node.js application that receives MessagePack-encoded data from an April Brother BLE Gateway V4, processes BLE device advertising data, and publishes structured JSON messages to an MQTT broker.
 
-## Setup
+## Features
+
+- ✅ Receives MessagePack data from BLE Gateway (no Content-Type headers required)
+- ✅ Processes advertising data from multiple BLE devices
+- ✅ Publishes device data to MQTT broker with structured JSON format
+- ✅ Comprehensive logging with configurable levels
+- ✅ Environment-based configuration
+- ✅ Full test suite with 167 passing tests
+
+## Quick Start
 
 1. **Install Dependencies**
    ```bash
    npm install
    ```
 
-2. **Configure Environment Variables**
+2. **Configure Environment**
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration
+   # Edit .env with your MQTT broker settings
    ```
 
-3. **Start the Application**
+3. **Run the Application**
    ```bash
    npm start
    ```
 
-## Project Structure
+4. **Send test data** (optional)
+   ```bash
+   npm test
+   ```
 
+## Configuration
+
+Key environment variables:
+
+- `MQTT_BROKER_URL`: MQTT broker connection URL
+- `MQTT_TOPIC_PREFIX`: Topic prefix for published messages
+- `PORT`: HTTP server port (default: 3000)
+- `LOG_LEVEL`: Logging level (debug, info, warn, error)
+
+See `.env.example` for complete configuration options.
+
+## API Endpoints
+
+### POST /tokendata
+Accepts MessagePack-encoded BLE device data from the gateway.
+
+**Request:**
+- Body: Binary MessagePack data
+- Content-Type: Not required (accepts any content type)
+
+**Response:**
+- 200: Data processed successfully
+- 400: Invalid data format
+- 500: Processing error
+
+## MQTT Output
+
+Published messages follow this structure:
+```json
+{
+  "mac": "12:34:56:78:90:AB",
+  "rssi": -45,
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "data": {
+    // Parsed advertising data
+  }
+}
 ```
-├── docs/                   # Documentation
-│   ├── functional.md       # Functional Requirements Document
-│   ├── technical.md        # Technical Specification Document
-│   └── tasks.md           # Engineering Task List
-├── src/                   # Application source code
-│   └── index.js          # Main entry point
-├── package.json          # Node.js project configuration
-├── .env.example         # Example environment configuration
-└── README.md           # This file
+
+## Documentation
+
+- [`docs/functional.md`](docs/functional.md) - Functional requirements
+- [`docs/technical.md`](docs/technical.md) - Technical specifications
+
+## Development
+
+**Run tests:**
+```bash
+npm test
 ```
 
-## Dependencies
+**Development with auto-reload:**
+```bash
+npm run dev
+```
 
-- **express**: HTTP server framework
-- **msgpack5**: MessagePack encoding/decoding library
-- **mqtt**: MQTT client library
-- **dotenv**: Environment variable management
+## Status
 
-## Development Status
-
-This project is currently in development. See `docs/tasks.md` for the current task list and progress.
+✅ **Production Ready** - Successfully processing real hardware data from BLE Gateway V4

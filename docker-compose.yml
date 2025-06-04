@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # BLE Gateway Data Processor
+  ble-gateway:
+    build: .
+    container_name: ble-gateway-processor
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVER_PORT=8000
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - MQTT_TOPIC_PREFIX=/blegateways/aprilbrother/device/
+      - MQTT_QOS=1
+      - MQTT_RETAIN=false
+      - LOG_LEVEL=info
+    depends_on:
+      - mosquitto
+    networks:
+      - ble-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MQTT Broker (Eclipse Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto-broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - ble-network
+    restart: unless-stopped
+
+  # MQTT Client for testing (optional)
+  mqtt-client:
+    image: efrecon/mqtt-client
+    container_name: mqtt-test-client
+    networks:
+      - ble-network
+    profiles:
+      - testing
+    command: >
+      sh -c "
+        echo 'Subscribing to BLE device topics...' &&
+        mosquitto_sub -h mosquitto -t '/blegateways/aprilbrother/device/+' -v
+      "
+
+networks:
+  ble-network:
+    driver: bridge
+
+volumes:
+  mosquitto_data:
+  mosquitto_logs:
