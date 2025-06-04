@@ -4,6 +4,7 @@
  */
 
 const { expect } = require('chai');
+const { clearRequireCache } = require('./utils');
 
 describe('Configuration Module', () => {
     let originalEnv;
@@ -34,8 +35,24 @@ describe('Configuration Module', () => {
 
     describe('Default Configuration', () => {
         it('should provide default values when environment variables are not set', () => {
+            // Save all environment variables that could affect config
+            const envVarsToTest = [
+                'SERVER_PORT', 'MQTT_BROKER_URL', 'MQTT_USERNAME', 'MQTT_PASSWORD',
+                'MQTT_TOPIC_PREFIX', 'MQTT_QOS', 'MQTT_RETAIN', 'LOG_LEVEL'
+            ];
+            const originalEnv = {};
+            
+            // Save and clear all relevant environment variables
+            envVarsToTest.forEach(varName => {
+                originalEnv[varName] = process.env[varName];
+                delete process.env[varName];
+            });
+            
+            // Clear module cache to get fresh config with no env vars
+            clearRequireCache(['../src/config.js']);
             const { config } = require('../src/config.js');
             
+            // Test that defaults are used when no env vars are set
             expect(config.server.port).to.equal(8000);
             expect(config.mqtt.brokerUrl).to.equal('mqtt://localhost:1883');
             expect(config.mqtt.username).to.equal('');
@@ -44,6 +61,13 @@ describe('Configuration Module', () => {
             expect(config.mqtt.qos).to.equal(1);
             expect(config.mqtt.retain).to.be.false;
             expect(config.logging.level).to.equal('info');
+            
+            // Restore original environment variables
+            envVarsToTest.forEach(varName => {
+                if (originalEnv[varName] !== undefined) {
+                    process.env[varName] = originalEnv[varName];
+                }
+            });
         });
     });
 
@@ -76,6 +100,17 @@ describe('Configuration Module', () => {
 
     describe('Configuration Validation', () => {
         it('should provide validation warnings for missing configuration', () => {
+            // Save and clear environment variables to test validation warnings
+            const envVarsToTest = ['MQTT_BROKER_URL', 'MQTT_TOPIC_PREFIX'];
+            const originalEnv = {};
+            
+            envVarsToTest.forEach(varName => {
+                originalEnv[varName] = process.env[varName];
+                delete process.env[varName];
+            });
+            
+            // Clear module cache to get fresh config
+            clearRequireCache(['../src/config.js']);
             const { validateConfig } = require('../src/config.js');
             const warnings = validateConfig();
             
@@ -83,6 +118,13 @@ describe('Configuration Module', () => {
             expect(warnings.length).to.be.greaterThan(0);
             expect(warnings.some(w => w.includes('MQTT_BROKER_URL'))).to.be.true;
             expect(warnings.some(w => w.includes('MQTT_TOPIC_PREFIX'))).to.be.true;
+            
+            // Restore original environment variables
+            envVarsToTest.forEach(varName => {
+                if (originalEnv[varName] !== undefined) {
+                    process.env[varName] = originalEnv[varName];
+                }
+            });
         });
 
         it('should provide fewer warnings when required variables are set', () => {

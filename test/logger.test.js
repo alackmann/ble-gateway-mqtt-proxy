@@ -46,8 +46,22 @@ describe('Logging Framework', () => {
 
     describe('Log Level Configuration', () => {
         it('should default to INFO log level', () => {
+            // Clear LOG_LEVEL environment variable to test default
+            const originalLogLevel = process.env.LOG_LEVEL;
+            delete process.env.LOG_LEVEL;
+            
+            // Clear module cache to get fresh logger
+            clearRequireCache(['../src/config.js', '../src/logger.js']);
             const logger = require('../src/logger');
+            
+            // Verify the environment is actually cleared
+            expect(process.env.LOG_LEVEL).to.be.undefined;
             expect(logger.getCurrentLogLevel()).to.equal(logger.LOG_LEVELS.INFO);
+            
+            // Restore original environment
+            if (originalLogLevel !== undefined) {
+                process.env.LOG_LEVEL = originalLogLevel;
+            }
         });
 
         it('should use configured log level from environment', () => {

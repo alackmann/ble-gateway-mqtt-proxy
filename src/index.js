@@ -95,7 +95,7 @@ app.post('/tokendata', async (req, res) => {
             });
         }
         
-        logger.logProcessingStart('parsing gateway data', { 
+        logger.debug('Starting gateway data parsing', { 
             dataSize: Buffer.isBuffer(decodedData) ? decodedData.length : 
                       typeof decodedData === 'string' ? decodedData.length : 
                       JSON.stringify(decodedData).length
@@ -265,11 +265,12 @@ app.post('/tokendata', async (req, res) => {
             logger.info('No devices to transform - skipping JSON transformation');
         }
         
-        // For now, just log that we processed the data successfully
-        logger.logProcessingSuccess('complete data processing', {
-            gatewayDeviceCount: parsedData.deviceCount,
-            parsedDeviceCount: deviceParsingResult.successCount,
-            gatewayMac: parsedData.gatewayInfo.mac
+        // Log that we processed the data successfully
+        logger.logProcessingSuccess(deviceParsingResult.successCount, {
+            version: parsedData.gatewayInfo.version,
+            messageId: parsedData.gatewayInfo.messageId,
+            ip: parsedData.gatewayInfo.ip,
+            mac: parsedData.gatewayInfo.mac
         });
         
         // Return 204 No Content as specified in the technical spec

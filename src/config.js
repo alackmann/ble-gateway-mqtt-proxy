@@ -5,7 +5,10 @@
 
 // Load environment variables from .env file (if it exists)
 // Environment variables will always override .env values
-require('dotenv').config();
+// Skip dotenv in test environment to allow proper test isolation
+if (process.env.NODE_ENV !== 'test') {
+    require('dotenv').config();
+}
 
 /**
  * Configuration object with all required parameters
