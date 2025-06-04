@@ -15,8 +15,9 @@ const mqttClient = require('./mqtt-client');
 const app = express();
 
 // Middleware to parse raw request bodies for MessagePack
+// Handle requests with no Content-Type header by using a custom type function
 app.use('/tokendata', express.raw({ 
-    type: '*/*', // Accept all content types since hardware doesn't send headers
+    type: () => true, // Accept all requests regardless of Content-Type
     limit: '10mb' // Set reasonable limit for BLE data
 }));
 
@@ -28,12 +29,28 @@ app.post('/tokendata', async (req, res) => {
     try {
         const sourceIP = req.ip || req.connection.remoteAddress;
         
+        // Debug: Log raw request details
+        logger.debug('Raw request debug info', {
+            hasBody: !!req.body,
+            bodyType: typeof req.body,
+            bodyConstructor: req.body?.constructor?.name,
+            bodyLength: req.body?.length,
+            isBuffer: Buffer.isBuffer(req.body),
+            rawBodySize: req.body ? req.body.length : 'undefined',
+            headers: req.headers
+        });
+        
         // Log incoming request
         logger.logRequest('POST', '/tokendata', 'MessagePack (assumed)', sourceIP, req.body?.length || 0);
         
         // Validate request body exists
         if (!req.body || req.body.length === 0) {
-            logger.warn('Empty request body received', { sourceIP });
+            logger.warn('Empty request body received', { 
+                sourceIP,
+                bodyExists: !!req.body,
+                bodyLength: req.body?.length,
+                bodyType: typeof req.body
+            });
             return res.status(400).json({ 
                 error: 'Request body is required' 
             });
