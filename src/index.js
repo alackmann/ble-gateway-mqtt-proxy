@@ -14,31 +14,22 @@ const mqttClient = require('./mqtt-client');
 
 const app = express();
 
-// Middleware to parse raw request bodies for MessagePack and JSON
+// Middleware to parse raw request bodies for MessagePack
 app.use('/tokendata', express.raw({ 
-    type: ['application/msgpack', 'application/json'],
+    type: '*/*', // Accept all content types since hardware doesn't send headers
     limit: '10mb' // Set reasonable limit for BLE data
 }));
 
 /**
  * POST /tokendata - Main endpoint for receiving BLE gateway data
- * Accepts both application/msgpack and application/json content types
+ * Always expects MessagePack format (hardware doesn't send Content-Type headers)
  */
 app.post('/tokendata', async (req, res) => {
     try {
-        const contentType = req.get('Content-Type');
         const sourceIP = req.ip || req.connection.remoteAddress;
         
         // Log incoming request
-        logger.logRequest('POST', '/tokendata', contentType, sourceIP, req.body?.length || 0);
-        
-        // Validate Content-Type
-        if (!contentType || (!contentType.includes('application/msgpack') && !contentType.includes('application/json'))) {
-            logger.warn(`Invalid Content-Type: ${contentType}`, { sourceIP });
-            return res.status(400).json({ 
-                error: 'Content-Type must be application/msgpack or application/json' 
-            });
-        }
+        logger.logRequest('POST', '/tokendata', 'MessagePack (assumed)', sourceIP, req.body?.length || 0);
         
         // Validate request body exists
         if (!req.body || req.body.length === 0) {
@@ -48,21 +39,15 @@ app.post('/tokendata', async (req, res) => {
             });
         }
         
-        logger.debug(`Processing ${req.body.length} bytes of data`);
+        logger.debug(`Processing ${req.body.length} bytes of MessagePack data`);
         
-        // Task 5: Implement request body decoding
+        // Task 5: Implement request body decoding (MessagePack only)
         let decodedData;
         
         try {
-            if (contentType.includes('application/msgpack')) {
-                logger.debug('Decoding MessagePack data...');
-                decodedData = msgpack.decode(req.body);
-                logger.debug('MessagePack data decoded successfully');
-            } else if (contentType.includes('application/json')) {
-                logger.debug('Parsing JSON data...');
-                decodedData = JSON.parse(req.body.toString());
-                logger.debug('JSON data parsed successfully');
-            }
+            logger.debug('Decoding MessagePack data...');
+            decodedData = msgpack.decode(req.body);
+            logger.debug('MessagePack data decoded successfully');
             
             // Log decoded data structure for verification (without full content for large payloads)
             const dataKeys = Object.keys(decodedData || {});
@@ -83,19 +68,17 @@ app.post('/tokendata', async (req, res) => {
             logger.debug('Gateway info', gatewayInfo);
             
         } catch (decodeError) {
-            logger.logProcessingError('request body decoding', decodeError, { 
-                contentType, 
+            logger.logProcessingError('MessagePack decoding', decodeError, { 
                 sourceIP, 
                 bodyLength: req.body.length 
             });
             return res.status(400).json({
-                error: 'Invalid request body format',
+                error: 'Invalid MessagePack format',
                 details: decodeError.message
             });
         }
         
         logger.logProcessingStart('parsing gateway data', { 
-            contentType,
             dataSize: Buffer.isBuffer(decodedData) ? decodedData.length : 
                       typeof decodedData === 'string' ? decodedData.length : 
                       JSON.stringify(decodedData).length
