@@ -92,7 +92,7 @@ function createMockEnvConfig() {
         MQTT_BROKER_URL: 'mqtt://test.mosquitto.org:1883',
         MQTT_USERNAME: 'testuser',
         MQTT_PASSWORD: 'testpass',
-        MQTT_TOPIC_PREFIX: '/test/ble/device/',
+        MQTT_TOPIC_PREFIX: '/test/ble/',
         MQTT_QOS: '1',
         MQTT_RETAIN: 'false',
         LOG_LEVEL: 'debug'

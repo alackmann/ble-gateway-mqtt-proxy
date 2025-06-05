@@ -36,7 +36,8 @@ describe('MQTT Client Module', function() {
       warn: sinon.stub(),
       error: sinon.stub(),
       logMqttConnection: sinon.stub(),
-      logMqttPublish: sinon.stub()
+      logMqttPublish: sinon.stub(),
+      logProcessingError: sinon.stub()
     };
     
     // Create a fresh instance of the module under test
@@ -55,9 +56,9 @@ describe('MQTT Client Module', function() {
       const macAddress = '00:11:22:33:44:55';
       const origPrefix = config.mqtt.topicPrefix;
       
-      // Test with the default prefix
+      // Test with the default prefix - should add 'device/' to the topic
       const topic = mqttClient.constructTopic(macAddress);
-      expect(topic).to.equal(origPrefix + macAddress);
+      expect(topic).to.equal(origPrefix + 'device/' + macAddress);
     });
     
     it('should handle prefix with trailing slash', function() {
@@ -68,12 +69,12 @@ describe('MQTT Client Module', function() {
       try {
         // The prefix already has a trailing slash in default config
         const topic = mqttClient.constructTopic(macAddress);
-        expect(topic).to.equal(origPrefix + macAddress);
+        expect(topic).to.equal(origPrefix + 'device/' + macAddress);
         
         // Test a prefix without a trailing slash
         config.mqtt.topicPrefix = '/test/prefix';
         const topic2 = mqttClient.constructTopic(macAddress);
-        expect(topic2).to.equal('/test/prefix/' + macAddress);
+        expect(topic2).to.equal('/test/prefix/device/' + macAddress);
       } finally {
         config.mqtt.topicPrefix = origPrefix;
       }
@@ -83,6 +84,34 @@ describe('MQTT Client Module', function() {
       expect(() => mqttClient.constructTopic(null)).to.throw('Invalid MAC address');
       expect(() => mqttClient.constructTopic('')).to.throw('Invalid MAC address');
       expect(() => mqttClient.constructTopic(123)).to.throw('Invalid MAC address');
+    });
+  });
+  
+  describe('constructGatewayTopic()', function() {
+    it('should correctly construct a gateway topic', function() {
+      const origPrefix = config.mqtt.topicPrefix;
+      
+      // Test with the default prefix - should add 'gateway' to the topic
+      const topic = mqttClient.constructGatewayTopic();
+      expect(topic).to.equal(origPrefix + 'gateway');
+    });
+    
+    it('should handle prefix with trailing slash', function() {
+      const origPrefix = config.mqtt.topicPrefix;
+      
+      // Save original and restore after test
+      try {
+        // The prefix already has a trailing slash in default config
+        const topic = mqttClient.constructGatewayTopic();
+        expect(topic).to.equal(origPrefix + 'gateway');
+        
+        // Test a prefix without a trailing slash
+        config.mqtt.topicPrefix = '/test/prefix';
+        const topic2 = mqttClient.constructGatewayTopic();
+        expect(topic2).to.equal('/test/prefix/gateway');
+      } finally {
+        config.mqtt.topicPrefix = origPrefix;
+      }
     });
   });
   
@@ -271,6 +300,91 @@ describe('MQTT Client Module', function() {
             done(err);
           }
         });
+    });
+  });
+  
+  describe('publishGatewayData()', function() {
+    beforeEach(function(done) {
+      // Reset state first
+      mqttClient._resetState();
+      
+      // Setup connected client for each test
+      const connectPromise = mqttClient.initializeMqttClient();
+      
+      // Simulate successful connection
+      mockClient.connected = true;
+      mockClient.emit('connect');
+      
+      connectPromise.then(() => {
+        done();
+      }).catch(done);
+    });
+
+    it('should successfully publish gateway data', function(done) {
+      const testGatewayData = {
+        v: '1.5.0',
+        mid: 12345,
+        time: 1641024000,
+        ip: '192.168.1.100',
+        mac: '12:34:56:78:9A:BC'
+      };
+      
+      // Setup publish to succeed
+      mockClient.publish.callsFake((topic, message, options, callback) => {
+        expect(topic).to.include('gateway');
+        const publishedData = JSON.parse(message);
+        expect(publishedData.v).to.equal('1.5.0');
+        expect(publishedData.mid).to.equal(12345);
+        expect(publishedData).to.have.property('processed_timestamp');
+        callback(null);
+      });
+      
+      mqttClient.publishGatewayData(testGatewayData).then(result => {
+        expect(result).to.be.true;
+        expect(mockClient.publish.calledOnce).to.be.true;
+        done();
+      }).catch(done);
+    });
+
+    it('should add processed_timestamp to gateway data', function(done) {
+      const testGatewayData = { v: '1.5.0', mid: 12345 };
+      
+      mockClient.publish.callsFake((topic, message, options, callback) => {
+        const publishedData = JSON.parse(message);
+        expect(publishedData).to.have.property('processed_timestamp');
+        expect(publishedData.processed_timestamp).to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+        callback(null);
+      });
+      
+      mqttClient.publishGatewayData(testGatewayData).then(() => {
+        done();
+      }).catch(done);
+    });
+
+    it('should reject with invalid gateway data', function(done) {
+      // Reset state to ensure no connection for this validation test
+      mqttClient._resetState();
+      
+      mqttClient.publishGatewayData(null).then(() => {
+        done(new Error('Expected promise to be rejected'));
+      }).catch(error => {
+        expect(error.message).to.include('Invalid gateway data');
+        done();
+      });
+    });
+
+    it('should reject when MQTT client not connected', function(done) {
+      // Reset and ensure no connection
+      mqttClient._resetState();
+      
+      const testGatewayData = { v: '1.5.0', mid: 12345 };
+      
+      mqttClient.publishGatewayData(testGatewayData).then(() => {
+        done(new Error('Expected promise to be rejected'));
+      }).catch(error => {
+        expect(error.message).to.include('MQTT client not connected');
+        done();
+      });
     });
   });
   
