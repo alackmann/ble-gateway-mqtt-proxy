@@ -89,9 +89,9 @@ git push origin v1.0.0
 #### Pull Request Testing
 ```bash
 # Create pull request
-# → Runs tests on Node.js 18, 20, 22
+# → Runs tests on Node.js v22
 # → Builds Docker image (no publishing)
-# → Validates container functionality
+# → Validates container functionality with smoke test
 ```
 
 ### Integration with Existing Infrastructure
