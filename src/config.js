@@ -24,7 +24,7 @@ const config = {
         brokerUrl: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
         username: process.env.MQTT_USERNAME || '',
         password: process.env.MQTT_PASSWORD || '',
-        topicPrefix: process.env.MQTT_TOPIC_PREFIX || '/blegateways/aprilbrother/device/',
+        topicPrefix: process.env.MQTT_TOPIC_PREFIX || '/blegateways/aprilbrother/',
         qos: parseInt(process.env.MQTT_QOS) || 1,
         retain: process.env.MQTT_RETAIN === 'true' || false,
     },
@@ -46,7 +46,7 @@ function validateConfig() {
     }
     
     if (!process.env.MQTT_TOPIC_PREFIX) {
-        warnings.push('MQTT_TOPIC_PREFIX not set, using default: /blegateways/aprilbrother/device/');
+        warnings.push('MQTT_TOPIC_PREFIX not set, using default: /blegateways/aprilbrother/');
     }
 
     return warnings;

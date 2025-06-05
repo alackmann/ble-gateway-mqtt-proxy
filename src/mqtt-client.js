@@ -297,6 +297,77 @@ function publishMultipleDeviceData(jsonPayloads) {
 }
 
 /**
+ * Publish gateway status data to MQTT broker
+ * @param {Object} gatewayData - Gateway data object containing v, mid, time, ip, mac, etc.
+ * @returns {Promise<boolean>} Promise that resolves to publish success status
+ */
+function publishGatewayData(gatewayData) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Validate input
+            if (!gatewayData || typeof gatewayData !== 'object') {
+                throw new Error('Invalid gateway data: must be an object');
+            }
+
+            // Check MQTT client connection
+            if (!mqttClient || !mqttClient.connected) {
+                throw new Error('MQTT client not connected');
+            }
+
+            // Add current timestamp
+            const gatewayPayload = {
+                ...gatewayData,
+                processed_timestamp: new Date().toISOString()
+            };
+
+            // Construct gateway topic
+            const topic = constructGatewayTopic();
+            
+            // Convert payload to JSON string
+            const message = JSON.stringify(gatewayPayload);
+            
+            // Publish options
+            const publishOptions = {
+                qos: config.mqtt.qos,
+                retain: config.mqtt.retain
+            };
+            
+            logger.debug('Publishing gateway data to MQTT', {
+                topic: topic,
+                payloadSize: message.length,
+                qos: publishOptions.qos,
+                retain: publishOptions.retain
+            });
+            
+            // Publish the message
+            mqttClient.publish(topic, message, publishOptions, (error) => {
+                if (error) {
+                    logger.logProcessingError('MQTT gateway publish failed', {
+                        error: error.message,
+                        topic: topic,
+                        payloadSize: message.length
+                    });
+                    reject(error);
+                } else {
+                    logger.debug('Gateway data published successfully', {
+                        topic: topic,
+                        payloadSize: message.length
+                    });
+                    resolve(true);
+                }
+            });
+            
+        } catch (error) {
+            logger.logProcessingError('Gateway data publishing error', {
+                error: error.message,
+                stack: error.stack
+            });
+            reject(error);
+        }
+    });
+}
+
+/**
  * Construct MQTT topic for device according to FR-004.4
  * @param {string} deviceMacAddress - Device MAC address (colon-separated)
  * @returns {string} Complete MQTT topic
@@ -312,11 +383,33 @@ function constructTopic(deviceMacAddress) {
         topicPrefix += '/';
     }
 
-    // Construct topic: <MQTT_TOPIC_PREFIX><DEVICE_MAC_ADDRESS>
-    const topic = `${topicPrefix}${deviceMacAddress}`;
+    // Construct topic: <MQTT_TOPIC_PREFIX>device/<DEVICE_MAC_ADDRESS>
+    const topic = `${topicPrefix}device/${deviceMacAddress}`;
     
     logger.debug('Constructed MQTT topic', {
         deviceMac: deviceMacAddress,
+        topicPrefix: topicPrefix,
+        fullTopic: topic
+    });
+
+    return topic;
+}
+
+/**
+ * Construct MQTT topic for gateway status messages
+ * @returns {string} Complete MQTT topic for gateway
+ */
+function constructGatewayTopic() {
+    // Ensure topic prefix ends with a separator if it doesn't already
+    let topicPrefix = config.mqtt.topicPrefix;
+    if (topicPrefix && !topicPrefix.endsWith('/')) {
+        topicPrefix += '/';
+    }
+
+    // Construct topic: <MQTT_TOPIC_PREFIX>gateway
+    const topic = `${topicPrefix}gateway`;
+    
+    logger.debug('Constructed gateway MQTT topic', {
         topicPrefix: topicPrefix,
         fullTopic: topic
     });
@@ -413,7 +506,9 @@ module.exports = {
     initializeMqttClient,
     publishDeviceData,
     publishMultipleDeviceData,
+    publishGatewayData,
     constructTopic,
+    constructGatewayTopic,
     isConnected,
     getConnectionStatus,
     disconnect,

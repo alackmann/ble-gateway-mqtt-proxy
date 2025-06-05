@@ -46,9 +46,8 @@ The system will consist of a Node.js application running inside a Docker contain
 *   **FR-001.1:** The application MUST expose an HTTP POST endpoint.
 *   **FR-001.2:** The default listening port for the HTTP server SHALL be configurable (e.g., `8000`).
 *   **FR-001.3:** The application MUST accept requests with `Content-Type: application/msgpack`.
-*   **FR-001.4:** The application MUST accept requests with `Content-Type: application/json`.
-*   **FR-001.5:** Upon successful processing of a request (data decoded and sent to MQTT), the application SHOULD respond with an HTTP `200 OK` (or `204 No Content`) status.
-*   **FR-001.6:** In case of an error processing the request (e.g., malformed data), the application SHOULD respond with an appropriate HTTP error code (e.g., `400 Bad Request`, `500 Internal Server Error`) and log the error.
+*   **FR-001.4:** Upon successful processing of a request (data decoded and sent to MQTT), the application SHOULD respond with an HTTP `200 OK` (or `204 No Content`) status.
+*   **FR-001.5:** In case of an error processing the request (e.g., malformed data), the application SHOULD respond with an appropriate HTTP error code (e.g., `400 Bad Request`, `500 Internal Server Error`) and log the error.
 
 ### FR-002: Incoming Data Processing
 *   **FR-002.1:** If the `Content-Type` is `application/msgpack`, the application MUST decode the request body using a MessagePack library.

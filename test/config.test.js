@@ -57,7 +57,7 @@ describe('Configuration Module', () => {
             expect(config.mqtt.brokerUrl).to.equal('mqtt://localhost:1883');
             expect(config.mqtt.username).to.equal('');
             expect(config.mqtt.password).to.equal('');
-            expect(config.mqtt.topicPrefix).to.equal('/blegateways/aprilbrother/device/');
+            expect(config.mqtt.topicPrefix).to.equal('/blegateways/aprilbrother/');
             expect(config.mqtt.qos).to.equal(1);
             expect(config.mqtt.retain).to.be.false;
             expect(config.logging.level).to.equal('info');
@@ -129,7 +129,7 @@ describe('Configuration Module', () => {
 
         it('should provide fewer warnings when required variables are set', () => {
             process.env.MQTT_BROKER_URL = 'mqtt://test.mosquitto.org:1883';
-            process.env.MQTT_TOPIC_PREFIX = '/test/ble/device/';
+            process.env.MQTT_TOPIC_PREFIX = '/test/ble/';
             
             // Clear require cache and reload config
             delete require.cache[require.resolve('../src/config.js')];
