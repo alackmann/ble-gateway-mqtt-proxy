@@ -35,14 +35,20 @@ This task list outlines the development steps for the BLE Gateway Data Processor
 11. **Task: Implement MQTT Publishing Logic**
     *   **Description:** For each generated JSON device payload, publish it to the MQTT broker. Dynamically construct the MQTT topic using the configured `MQTT_TOPIC_PREFIX` and the device's MAC address, as per FR-004.4. Log successful publications or any errors. Consider writing tests for the publishing logic (e.g., mocking the MQTT client to check published messages and topics).
 
-12. **Task: Create Dockerfile and Dockerize Application**
+12. **Task: Implement Gateway Status MQTT Publishing**
+    *   **Description:** Implement functionality to publish a message to MQTT with the top-level gateway information each time a valid POST is received from the gateway. Add the current date/time to this gateway data. The message should be published to the topic path formed by concatenating the configured `MQTT_TOPIC_PREFIX` and "gateway" (e.g., `ble/gateway`). Write tests to verify the gateway status publishing works correctly with various gateway data inputs.
+
+13. **Task: Create Dockerfile and Dockerize Application**
     *   **Description:** Write a `Dockerfile` to build a container image for the Node.js application. Ensure the Dockerfile correctly installs dependencies (including devDependencies if tests are run in the build stage), copies application code, exposes the necessary port, and sets up the entry point. Verify that configuration can be passed via environment variables to the Docker container (NFR-002, FR-005).
 
-13. **Task: Implement Robust Error Handling and HTTP Responses**
+14. **Task: Implement Robust Error Handling and HTTP Responses**
     *   **Description:** Refine error handling throughout the application. Ensure the HTTP endpoint returns appropriate status codes (e.g., `204 No Content` for success, `400 Bad Request` for malformed input, `500 Internal Server Error` for processing issues) as per FR-001.5 and FR-001.6. Write integration tests for the HTTP endpoint to verify error responses.
 
-14. **Task: Enhance Application Logging (Comprehensive)**
+15. **Task: Enhance Application Logging (Comprehensive)**
     *   **Description:** Expand logging to provide more detailed operational insights. This includes logging the number of devices processed from each incoming message, details of MQTT publishing successes/failures, and any other significant events or errors (FR-006). Consider log levels if using a more advanced logger.
 
-15. **Task: Comprehensive Testing and Validation (Automated & Manual)**
+16. **Task: Comprehensive Testing and Validation (Automated & Manual)**
     *   **Description:** Expand the existing automated test suite with additional unit and integration tests (e.g., using Supertest for HTTP endpoint testing).
+
+17. **Task: Setup GitHub Actions for Automated Container Image Publishing**
+    *   **Description:** Create a GitHub Actions workflow (`.github/workflows/docker-publish.yml`) that automatically builds and publishes Docker container images to GitHub Container Registry (ghcr.io) on every commit to the main branch. The workflow should include steps to: checkout code, set up Docker Buildx, authenticate with GitHub Container Registry using `GITHUB_TOKEN`, build the Docker image with appropriate tags (including `latest` and commit SHA), run tests within the container build process, and push the image to `ghcr.io/[username]/ble-gateway-mqtt-proxy`. Ensure the workflow only triggers on pushes to the main branch and pull requests for testing purposes.
