@@ -31,7 +31,7 @@ Successfully implemented GitHub Actions workflows for automated Docker container
 **Purpose**: Continuous integration testing for pull requests.
 
 **Features**:
-- **Matrix Testing**: Tests across Node.js versions 18, 20, 22
+- **Node.js Testing**: Tests on Node.js v22 (latest LTS)
 - **Pull Request Validation**: Comprehensive testing before merge
 - **Docker Build Testing**: Validates Docker image builds without publishing
 - **Smoke Testing**: Basic container functionality validation
