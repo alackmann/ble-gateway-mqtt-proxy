@@ -10,7 +10,7 @@ services:
     environment:
       - SERVER_PORT=8000
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
-      - MQTT_TOPIC_PREFIX=/blegateways/aprilbrother/device/
+      - MQTT_TOPIC_PREFIX=/blegateways/aprilbrother/
       - MQTT_QOS=1
       - MQTT_RETAIN=false
       - LOG_LEVEL=info
@@ -51,8 +51,8 @@ services:
       - testing
     command: >
       sh -c "
-        echo 'Subscribing to BLE device topics...' &&
-        mosquitto_sub -h mosquitto -t '/blegateways/aprilbrother/device/+' -v
+        echo 'Subscribing to BLE device and gateway topics...' &&
+        mosquitto_sub -h mosquitto -t '/blegateways/aprilbrother/+' -t '/blegateways/aprilbrother/device/+' -v
       "
 
 networks:
