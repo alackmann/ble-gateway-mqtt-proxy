@@ -265,6 +265,29 @@ app.post('/tokendata', async (req, res) => {
             logger.info('No devices to transform - skipping JSON transformation');
         }
         
+        // Task 12: Publish gateway status information to MQTT
+        try {
+            logger.debug('Publishing gateway status to MQTT broker', {
+                gatewayInfo: {
+                    version: parsedData.gatewayInfo.version,
+                    messageId: parsedData.gatewayInfo.messageId,
+                    ip: parsedData.gatewayInfo.ip,
+                    mac: parsedData.gatewayInfo.mac
+                }
+            });
+            
+            await mqttClient.publishGatewayData(parsedData.gatewayInfo);
+            logger.info('Gateway status published to MQTT successfully');
+            
+        } catch (gatewayMqttError) {
+            logger.error('Gateway MQTT publishing failed', {
+                error: gatewayMqttError.message,
+                gatewayMac: parsedData.gatewayInfo.mac
+            });
+            // Note: We don't return an error response here as the data was processed successfully
+            // Gateway MQTT publishing failures are logged but don't affect the HTTP response
+        }
+        
         // Log that we processed the data successfully
         logger.logProcessingSuccess(deviceParsingResult.successCount, {
             version: parsedData.gatewayInfo.version,
