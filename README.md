@@ -1,5 +1,8 @@
 # BLE Gateway Data Processor
 
+[![Build and Publish Docker Image](https://github.com/USER/REPO/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/USER/REPO/actions/workflows/docker-publish.yml)
+[![CI - Test and Build](https://github.com/USER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/USER/REPO/actions/workflows/ci.yml)
+
 A Node.js application that receives MessagePack-encoded data from an April Brother BLE Gateway V4, processes BLE device advertising data, and publishes structured JSON messages to an MQTT broker.
 
 ## Features
