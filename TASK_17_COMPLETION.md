@@ -34,7 +34,6 @@ Successfully implemented GitHub Actions workflows for automated Docker container
 - **Matrix Testing**: Tests across Node.js versions 18, 20, 22
 - **Pull Request Validation**: Comprehensive testing before merge
 - **Docker Build Testing**: Validates Docker image builds without publishing
-- **Coverage Reporting**: Integrates with Codecov
 - **Smoke Testing**: Basic container functionality validation
 
 **Triggers**:

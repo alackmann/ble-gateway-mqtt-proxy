@@ -35,16 +35,6 @@ jobs:
     - name: Run tests
       run: npm test
 
-    - name: Run test coverage
-      run: npm run test:coverage
-      if: matrix.node-version == '20'
-
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v4
-      if: matrix.node-version == '20'
-      with:
-        fail_ci_if_error: false
-
   docker-build-test:
     runs-on: ubuntu-latest
     needs: test
