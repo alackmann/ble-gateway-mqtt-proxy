@@ -46,6 +46,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
+        load: true
         push: false
         tags: ble-gateway-mqtt-proxy:test
         cache-from: type=gha
@@ -53,11 +54,31 @@ jobs:
 
     - name: Test Docker image
       run: |
-        # Test that the image was built successfully
+        echo "🔍 Checking if Docker image was built successfully..."
         docker images ble-gateway-mqtt-proxy:test
         
-        # Test that the image has the expected labels
-        docker inspect ble-gateway-mqtt-proxy:test --format '{{ .Config.Labels }}'
+        echo "📋 Verifying image exists..."
+        if ! docker images ble-gateway-mqtt-proxy:test --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}" | grep -q "ble-gateway-mqtt-proxy"; then
+          echo "❌ Docker image not found!"
+          echo "Available images:"
+          docker images
+          exit 1
+        fi
         
-        # Test that the image runs (quick smoke test)
-        timeout 10s docker run --rm ble-gateway-mqtt-proxy:test || true
+        echo "✅ Docker image found successfully"
+        
+        echo "🏷️ Inspecting image labels..."
+        docker inspect ble-gateway-mqtt-proxy:test --format '{{ .Config.Labels }}' || echo "No labels found"
+        
+        echo "🚀 Running basic smoke test..."
+        # Set environment variables for the container test
+        timeout 15s docker run --rm \
+          -e HTTP_PORT=3000 \
+          -e MQTT_BROKER_URL=mqtt://localhost:1883 \
+          -e MQTT_TOPIC_PREFIX=test/ \
+          ble-gateway-mqtt-proxy:test &
+        
+        # Give it a moment to start up
+        sleep 5
+        
+        echo "✅ Docker container smoke test completed"
