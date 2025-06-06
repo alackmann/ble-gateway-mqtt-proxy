@@ -3,14 +3,14 @@ version: '3.8'
 services:
   # BLE Gateway Data Processor
   ble-gateway:
-    build: .
-    container_name: ble-gateway-processor
+    build: ghcr.io/alackmann/ble-gateway-mqtt-proxy:main
+    container_name: ble-gateway
     ports:
       - "8000:8000"
     environment:
       - SERVER_PORT=8000
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
-      - MQTT_TOPIC_PREFIX=/blegateways/aprilbrother/
+      - MQTT_TOPIC_PREFIX=blegateways/
       - MQTT_QOS=1
       - MQTT_RETAIN=false
       - LOG_LEVEL=info
@@ -52,7 +52,7 @@ services:
     command: >
       sh -c "
         echo 'Subscribing to BLE device and gateway topics...' &&
-        mosquitto_sub -h mosquitto -t '/blegateways/aprilbrother/+' -t '/blegateways/aprilbrother/device/+' -v
+        mosquitto_sub -h mosquitto -t 'blegateways/+' -t 'blegateways/device/+' -v
       "
 
 networks:
