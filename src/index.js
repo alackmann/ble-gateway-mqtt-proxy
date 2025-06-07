@@ -418,10 +418,10 @@ async function shutdown() {
 }
 
 // Start the HTTP server
-app.listen(config.server.port, async () => {
+app.listen(config.server.port, config.server.host, async () => {
     logger.logStartup(config.server.port);
-    logger.info(`POST endpoint available at: http://localhost:${config.server.port}/tokendata`);
-    logger.info(`Health check available at: http://localhost:${config.server.port}/health`);
+    logger.info(`POST endpoint available at: http://${config.server.host}:${config.server.port}/tokendata`);
+    logger.info(`Health check available at: http://${config.server.host}:${config.server.port}/health`);
     
     // Initialize MQTT connection after server starts
     await initializeApplication();
