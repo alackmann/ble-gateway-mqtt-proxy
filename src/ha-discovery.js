@@ -41,7 +41,7 @@ function createRssiSensorConfig(macWithoutColons, macWithColons, friendlyName, d
     return {
         name: `${friendlyName} RSSI`,
         unique_id: `ble_token_${macWithoutColons}_rssi`,
-        state_topic: `${config.mqtt.topicPrefix}state/${macWithColons}`,
+        state_topic: `${config.mqtt.topicPrefix}state/${macWithoutColons}`,
         value_template: "{{ value_json.rssi | default(0) }}",
         unit_of_measurement: "dBm",
         device_class: "signal_strength",
@@ -63,7 +63,7 @@ function createLastSeenSensorConfig(macWithoutColons, macWithColons, friendlyNam
     return {
         name: `${friendlyName} Last Seen`,
         unique_id: `ble_token_${macWithoutColons}_last_seen`,
-        state_topic: `${config.mqtt.topicPrefix}state/${macWithColons}`,
+        state_topic: `${config.mqtt.topicPrefix}state/${macWithoutColons}`,
         value_template: "{{ value_json.last_seen_timestamp }}",
         device_class: "timestamp",
         expire_after: 300,
