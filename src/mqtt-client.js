@@ -370,6 +370,72 @@ function publishGatewayData(gatewayData) {
 }
 
 /**
+ * Generic publish method for MQTT messages
+ * @param {string} topic - MQTT topic to publish to
+ * @param {string} message - Message payload (should be JSON string)
+ * @param {Object} options - Publish options (qos, retain, etc.)
+ * @returns {Promise<boolean>} Promise that resolves to publish success status
+ */
+function publish(topic, message, options = {}) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Check MQTT client connection
+            if (!mqttClient || !mqttClient.connected) {
+                throw new Error('MQTT client not connected');
+            }
+
+            // Validate inputs
+            if (!topic || typeof topic !== 'string') {
+                throw new Error('Invalid topic: must be a non-empty string');
+            }
+
+            if (message === undefined || message === null) {
+                throw new Error('Invalid message: message cannot be null or undefined');
+            }
+
+            // Default publish options
+            const publishOptions = {
+                qos: config.mqtt.qos,
+                retain: false,
+                ...options
+            };
+
+            logger.debug('Publishing message to MQTT', {
+                topic: topic,
+                messageSize: message.length,
+                qos: publishOptions.qos,
+                retain: publishOptions.retain
+            });
+
+            // Publish message
+            mqttClient.publish(topic, message, publishOptions, (error) => {
+                if (error) {
+                    logger.error('MQTT publish failed', {
+                        error: error.message,
+                        topic: topic,
+                        messageSize: message.length
+                    });
+                    reject(new Error(`MQTT publish failed: ${error.message}`));
+                } else {
+                    logger.debug('MQTT publish successful', {
+                        topic: topic,
+                        messageSize: message.length
+                    });
+                    resolve(true);
+                }
+            });
+
+        } catch (error) {
+            logger.error('MQTT publish error', {
+                error: error.message,
+                topic: topic
+            });
+            reject(error);
+        }
+    });
+}
+
+/**
  * Construct MQTT topic for device according to Home Assistant integration spec
  * @param {string} deviceMacAddress - Device MAC address (colon-separated)
  * @returns {string} Complete MQTT topic
@@ -510,6 +576,7 @@ module.exports = {
     publishDeviceData,
     publishMultipleDeviceData,
     publishGatewayData,
+    publish,
     constructTopic,
     constructGatewayTopic,
     isConnected,
