@@ -10,15 +10,6 @@ if (process.env.NODE_ENV !== 'test') {
     require('dotenv').config();
 }
 
-// Import logger but handle circular dependency
-let logger;
-try {
-    logger = require('./logger');
-} catch (error) {
-    // If there's a circular dependency, use console as fallback
-    logger = console;
-}
-
 /**
  * Configuration object with all required parameters
  */
@@ -95,9 +86,15 @@ function parseHomeAssistantDevices() {
             deviceMap.set(macWithoutColons.toLowerCase(), { name });
             
         } catch (error) {
-            if (logger.error) {
-                logger.error(`Error parsing ${deviceVar}: ${error.message}`);
-            } else {
+            try {
+                // Lazy load logger to avoid circular dependency
+                const logger = require('./logger');
+                if (logger.error) {
+                    logger.error(`Error parsing ${deviceVar}: ${error.message}`);
+                } else {
+                    console.error(`Error parsing ${deviceVar}: ${error.message}`);
+                }
+            } catch (loggerError) {
                 console.error(`Error parsing ${deviceVar}: ${error.message}`);
             }
         }
@@ -140,37 +137,62 @@ function get(path) {
  * Log configuration status
  */
 function logConfigStatus() {
-    // Use logger if available, otherwise fallback to console
-    const log = logger.info ? logger : console;
-    
-    log.info('Configuration loaded:');
-    log.info(`  Server Port: ${config.server.port}`);
-    log.info(`  MQTT Broker: ${config.mqtt.brokerUrl}`);
-    log.info(`  MQTT Topic Prefix: ${config.mqtt.topicPrefix}`);
-    log.info(`  Log Level: ${config.logging.level}`);
-    
-    // Home Assistant configuration logging
-    if (config.homeAssistant.enabled) {
-        log.info('Home Assistant Integration:');
-        log.info(`  Discovery Topic Prefix: ${config.homeAssistant.discoveryTopicPrefix}`);
-        log.info(`  Gateway Name: ${config.homeAssistant.gatewayName}`);
-        log.info(`  Configured BLE Devices: ${config.homeAssistant.devices.size}`);
+    try {
+        // Lazy load logger to avoid circular dependency
+        const logger = require('./logger');
+        const log = logger.info ? logger : console;
         
-        if (config.homeAssistant.devices.size > 0) {
-            log.info('  BLE Devices:');
-            config.homeAssistant.devices.forEach((device, mac) => {
-                log.info(`    - ${device.name} (${mac})`);
-            });
-        }
-    } else {
-        log.info('Home Assistant Integration: Disabled');
-    }
+        log.info('Configuration loaded:');
+        log.info(`  Server Port: ${config.server.port}`);
+        log.info(`  MQTT Broker: ${config.mqtt.brokerUrl}`);
+        log.info(`  MQTT Topic Prefix: ${config.mqtt.topicPrefix}`);
+        log.info(`  Log Level: ${config.logging.level}`);
     
-    const warnings = validateConfig();
-    if (warnings.length > 0) {
-        const warn = logger.warn ? logger.warn : console.warn;
-        warn('Configuration warnings:');
-        warnings.forEach(warning => warn(`  - ${warning}`));
+        // Home Assistant configuration logging
+        if (config.homeAssistant.enabled) {
+            log.info('Home Assistant Integration:');
+            log.info(`  Discovery Topic Prefix: ${config.homeAssistant.discoveryTopicPrefix}`);
+            log.info(`  Gateway Name: ${config.homeAssistant.gatewayName}`);
+            log.info(`  Configured BLE Devices: ${config.homeAssistant.devices.size}`);
+            
+            if (config.homeAssistant.devices.size > 0) {
+                log.info('  BLE Devices:');
+                config.homeAssistant.devices.forEach((device, mac) => {
+                    log.info(`    - ${device.name} (${mac})`);
+                });
+            }
+        } else {
+            log.info('Home Assistant Integration: Disabled');
+        }
+        
+        const warnings = validateConfig();
+        if (warnings.length > 0) {
+            const warn = logger.warn ? logger.warn : console.warn;
+            warn('Configuration warnings:');
+            warnings.forEach(warning => warn(`  - ${warning}`));
+        }
+    } catch (loggerError) {
+        // Fallback to console if logger is not available
+        console.info('Configuration loaded:');
+        console.info(`  Server Port: ${config.server.port}`);
+        console.info(`  MQTT Broker: ${config.mqtt.brokerUrl}`);
+        console.info(`  MQTT Topic Prefix: ${config.mqtt.topicPrefix}`);
+        console.info(`  Log Level: ${config.logging.level}`);
+        
+        if (config.homeAssistant.enabled) {
+            console.info('Home Assistant Integration:');
+            console.info(`  Discovery Topic Prefix: ${config.homeAssistant.discoveryTopicPrefix}`);
+            console.info(`  Gateway Name: ${config.homeAssistant.gatewayName}`);
+            console.info(`  Configured BLE Devices: ${config.homeAssistant.devices.size}`);
+        } else {
+            console.info('Home Assistant Integration: Disabled');
+        }
+        
+        const warnings = validateConfig();
+        if (warnings.length > 0) {
+            console.warn('Configuration warnings:');
+            warnings.forEach(warning => console.warn(`  - ${warning}`));
+        }
     }
 }
 
