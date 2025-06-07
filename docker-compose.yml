@@ -8,12 +8,20 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Standard configuration
       - SERVER_PORT=8000
       - MQTT_BROKER_URL=mqtt://mosquitto:1883
       - MQTT_TOPIC_PREFIX=blegateways/
       - MQTT_QOS=1
       - MQTT_RETAIN=false
       - LOG_LEVEL=info
+      
+      # Home Assistant integration (optional)
+      - HA_ENABLED=true
+      - HA_DISCOVERY_TOPIC_PREFIX=homeassistant
+      - HA_GATEWAY_NAME=April Brother BLE Gateway
+      - HA_BLE_DEVICE_1=123b6a1b85ef,Car Token
+      - HA_BLE_DEVICE_2=aabbccddeeff,Bike Token
     depends_on:
       - mosquitto
     networks:
@@ -52,7 +60,7 @@ services:
     command: >
       sh -c "
         echo 'Subscribing to BLE device and gateway topics...' &&
-        mosquitto_sub -h mosquitto -t 'blegateways/+' -t 'blegateways/device/+' -v
+        mosquitto_sub -h mosquitto -t 'blegateways/+' -t 'blegateways/state/+' -t 'homeassistant/#' -v
       "
 
 networks:

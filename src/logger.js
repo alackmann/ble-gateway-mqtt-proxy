@@ -3,8 +3,6 @@
  * Basic logging framework with configurable log levels
  */
 
-const { config } = require('./config');
-
 // Log levels with numeric priorities (lower = higher priority)
 const LOG_LEVELS = {
     ERROR: 0,
@@ -15,8 +13,15 @@ const LOG_LEVELS = {
 
 // Get current log level from configuration
 const getCurrentLogLevel = () => {
-    const level = config.logging.level.toUpperCase();
-    return LOG_LEVELS[level] !== undefined ? LOG_LEVELS[level] : LOG_LEVELS.INFO;
+    try {
+        // Lazy load config to avoid circular dependency
+        const { config } = require('./config');
+        const level = config.logging.level.toUpperCase();
+        return LOG_LEVELS[level] !== undefined ? LOG_LEVELS[level] : LOG_LEVELS.INFO;
+    } catch (error) {
+        // Fallback to INFO level if config is not available
+        return LOG_LEVELS.INFO;
+    }
 };
 
 /**
@@ -85,9 +90,15 @@ function debug(message, data = null) {
  */
 function logStartup(port) {
     info(`BLE Gateway Data Processor starting on port ${port}`);
-    info(`Log level set to: ${config.logging.level}`);
-    info(`MQTT broker: ${config.mqtt.brokerUrl}`);
-    info(`MQTT topic prefix: ${config.mqtt.topicPrefix}`);
+    try {
+        // Lazy load config to avoid circular dependency
+        const { config } = require('./config');
+        info(`Log level set to: ${config.logging.level}`);
+        info(`MQTT broker: ${config.mqtt.brokerUrl}`);
+        info(`MQTT topic prefix: ${config.mqtt.topicPrefix}`);
+    } catch (error) {
+        info('Configuration details not available during startup');
+    }
 }
 
 /**

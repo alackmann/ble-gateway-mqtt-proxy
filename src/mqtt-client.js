@@ -6,6 +6,7 @@
 const mqtt = require('mqtt');
 const { config } = require('./config');
 const logger = require('./logger');
+const { normalizeMac } = require('./utils');
 
 // MQTT client instance
 let mqttClient = null;
@@ -174,16 +175,18 @@ function publishDeviceData(jsonPayload) {
                 throw new Error('MQTT client not connected');
             }
 
-            // Construct topic according to FR-004.4
+            // Construct topic - now uses the new 'state/' topic format
             const topic = constructTopic(jsonPayload.mac_address);
             
             // Convert payload to JSON string
             const message = JSON.stringify(jsonPayload);
             
             // Publish options
+            // BREAKING CHANGE: Always use retain: false for state messages
+            // This overrides the MQTT_RETAIN configuration for state topics
             const publishOptions = {
                 qos: config.mqtt.qos,
-                retain: config.mqtt.retain
+                retain: false // State messages must not be retained for Home Assistant compatibility
             };
 
             logger.debug('Publishing device data to MQTT', {
@@ -286,7 +289,7 @@ function publishMultipleDeviceData(jsonPayloads) {
             }
         }
 
-        logger.info('MQTT publishing completed', {
+        logger.debug('MQTT publishing completed', {
             totalPayloads: results.totalCount,
             successfulPublications: results.successCount,
             failedPublications: results.errorCount
@@ -329,7 +332,7 @@ function publishGatewayData(gatewayData) {
             // Publish options
             const publishOptions = {
                 qos: config.mqtt.qos,
-                retain: config.mqtt.retain
+                retain: false // Never retain gateway state messages
             };
             
             logger.debug('Publishing gateway data to MQTT', {
@@ -368,8 +371,74 @@ function publishGatewayData(gatewayData) {
 }
 
 /**
- * Construct MQTT topic for device according to FR-004.4
- * @param {string} deviceMacAddress - Device MAC address (colon-separated)
+ * Generic publish method for MQTT messages
+ * @param {string} topic - MQTT topic to publish to
+ * @param {string} message - Message payload (should be JSON string)
+ * @param {Object} options - Publish options (qos, retain, etc.)
+ * @returns {Promise<boolean>} Promise that resolves to publish success status
+ */
+function publish(topic, message, options = {}) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Check MQTT client connection
+            if (!mqttClient || !mqttClient.connected) {
+                throw new Error('MQTT client not connected');
+            }
+
+            // Validate inputs
+            if (!topic || typeof topic !== 'string') {
+                throw new Error('Invalid topic: must be a non-empty string');
+            }
+
+            if (message === undefined || message === null) {
+                throw new Error('Invalid message: message cannot be null or undefined');
+            }
+
+            // Default publish options
+            const publishOptions = {
+                qos: config.mqtt.qos,
+                retain: false,
+                ...options
+            };
+
+            logger.debug('Publishing message to MQTT', {
+                topic: topic,
+                messageSize: message.length,
+                qos: publishOptions.qos,
+                retain: publishOptions.retain
+            });
+
+            // Publish message
+            mqttClient.publish(topic, message, publishOptions, (error) => {
+                if (error) {
+                    logger.error('MQTT publish failed', {
+                        error: error.message,
+                        topic: topic,
+                        messageSize: message.length
+                    });
+                    reject(new Error(`MQTT publish failed: ${error.message}`));
+                } else {
+                    logger.debug('MQTT publish successful', {
+                        topic: topic,
+                        messageSize: message.length
+                    });
+                    resolve(true);
+                }
+            });
+
+        } catch (error) {
+            logger.error('MQTT publish error', {
+                error: error.message,
+                topic: topic
+            });
+            reject(error);
+        }
+    });
+}
+
+/**
+ * Construct MQTT topic for device according to Home Assistant integration spec
+ * @param {string} deviceMacAddress - Device MAC address (with or without colons, will be normalized to lowercase no colons)
  * @returns {string} Complete MQTT topic
  */
 function constructTopic(deviceMacAddress) {
@@ -377,22 +446,31 @@ function constructTopic(deviceMacAddress) {
         throw new Error('Invalid MAC address for topic construction');
     }
 
-    // Ensure topic prefix ends with a separator if it doesn't already
-    let topicPrefix = config.mqtt.topicPrefix;
-    if (topicPrefix && !topicPrefix.endsWith('/')) {
-        topicPrefix += '/';
+    try {
+        // Use the consistent normalizeMac function to ensure lowercase format
+        const macWithoutColons = normalizeMac(deviceMacAddress);
+
+        // Ensure topic prefix ends with a separator if it doesn't already
+        let topicPrefix = config.mqtt.topicPrefix;
+        if (topicPrefix && !topicPrefix.endsWith('/')) {
+            topicPrefix += '/';
+        }
+
+        // BREAKING CHANGE: Construct topic: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_NO_COLONS_LOWERCASE>
+        // This replaces the previous format: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_WITH_COLONS>
+        const topic = `${topicPrefix}state/${macWithoutColons}`;
+        
+        logger.debug('Constructed MQTT topic', {
+            originalMac: deviceMacAddress,
+            normalizedMac: macWithoutColons,
+            topicPrefix: topicPrefix,
+            fullTopic: topic
+        });
+
+        return topic;
+    } catch (error) {
+        throw new Error(`Failed to construct MQTT topic: ${error.message}`);
     }
-
-    // Construct topic: <MQTT_TOPIC_PREFIX>device/<DEVICE_MAC_ADDRESS>
-    const topic = `${topicPrefix}device/${deviceMacAddress}`;
-    
-    logger.debug('Constructed MQTT topic', {
-        deviceMac: deviceMacAddress,
-        topicPrefix: topicPrefix,
-        fullTopic: topic
-    });
-
-    return topic;
 }
 
 /**
@@ -406,8 +484,8 @@ function constructGatewayTopic() {
         topicPrefix += '/';
     }
 
-    // Construct topic: <MQTT_TOPIC_PREFIX>gateway
-    const topic = `${topicPrefix}gateway`;
+    // Construct topic: <MQTT_TOPIC_PREFIX>gateway/state
+    const topic = `${topicPrefix}gateway/state`;
     
     logger.debug('Constructed gateway MQTT topic', {
         topicPrefix: topicPrefix,
@@ -507,6 +585,7 @@ module.exports = {
     publishDeviceData,
     publishMultipleDeviceData,
     publishGatewayData,
+    publish,
     constructTopic,
     constructGatewayTopic,
     isConnected,

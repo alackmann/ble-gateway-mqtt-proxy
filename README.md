@@ -10,9 +10,10 @@ A Node.js application that receives MessagePack-encoded data from an April Broth
 - ✅ Receives MessagePack data from BLE Gateway (no Content-Type headers required)
 - ✅ Processes advertising data from multiple BLE devices
 - ✅ Publishes device data to MQTT broker with structured JSON format
+- ✅ Home Assistant MQTT Auto Discovery integration
 - ✅ Comprehensive logging with configurable levels
 - ✅ Environment-based configuration
-- ✅ Full test suite with 167 passing tests
+- ✅ Full test suite with 196 passing tests
 
 ## Quick Start
 
@@ -43,8 +44,22 @@ Key environment variables:
 
 - `MQTT_BROKER_URL`: MQTT broker connection URL
 - `MQTT_TOPIC_PREFIX`: Topic prefix for published messages
-- `PORT`: HTTP server port (default: 3000)
+- `SERVER_PORT`: HTTP server port (default: 8000)
+- `SERVER_HOST`: Server bind address (default: 0.0.0.0 - all interfaces)
 - `LOG_LEVEL`: Logging level (debug, info, warn, error)
+
+### Home Assistant Integration
+
+Enable Home Assistant MQTT Auto Discovery with these variables:
+
+- `HA_ENABLED`: Set to `true` to enable Home Assistant integration
+- `HA_DISCOVERY_TOPIC_PREFIX`: Topic prefix for discovery messages (default: `homeassistant`)
+- `HA_GATEWAY_NAME`: Name for the gateway in Home Assistant (default: `April Brother BLE Gateway`)
+- `HA_BLE_DEVICE_X`: Define BLE devices for auto-discovery, where X is a sequential number (1, 2, 3...)
+  - Format: `<MAC_WITHOUT_COLONS>,<FRIENDLY_NAME>`
+  - Example: `HA_BLE_DEVICE_1=123b6a1b85ef,Car Token`
+
+When `HA_ENABLED` is `true`, both BLE devices and the gateway itself will be automatically discovered in Home Assistant.
 
 See `.env.example` for complete configuration options.
 
@@ -80,6 +95,7 @@ Published messages follow this structure:
 
 - [`docs/functional.md`](docs/functional.md) - Functional requirements
 - [`docs/technical.md`](docs/technical.md) - Technical specifications
+- [`docs/homeassistant/home_assistant.md](docs/homeassistant/home_assistant.md) - Home Assistant support spec
 
 ## Development
 

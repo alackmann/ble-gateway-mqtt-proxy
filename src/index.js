@@ -11,6 +11,7 @@ const gatewayParser = require('./gateway-parser');
 const deviceParser = require('./device-parser');
 const jsonTransformer = require('./json-transformer');
 const mqttClient = require('./mqtt-client');
+const haDiscovery = require('./ha-discovery');
 
 const app = express();
 
@@ -149,15 +150,22 @@ app.post('/tokendata', async (req, res) => {
                 details: 'All devices in the array had parsing errors'
             });
         }
-        
-        // Log successful device parsing
-        logger.info('Device parsing completed', {
-            totalDevices: deviceParsingResult.totalCount,
-            successfulDevices: deviceParsingResult.successCount,
-            failedDevices: deviceParsingResult.errorCount
-        });
-        
-        // Get device statistics for logging
+         // Log device parsing summary (only if there are issues or at debug level)
+        if (deviceParsingResult.errorCount > 0) {
+            logger.info('Device parsing completed', {
+                totalDevices: deviceParsingResult.totalCount,
+                successfulDevices: deviceParsingResult.successCount,
+                failedDevices: deviceParsingResult.errorCount
+            });
+        } else {
+            logger.debug('Device parsing completed', {
+                totalDevices: deviceParsingResult.totalCount,
+                successfulDevices: deviceParsingResult.successCount,
+                failedDevices: deviceParsingResult.errorCount
+            });
+        }
+
+        // Get device statistics for debug logging only
         if (deviceParsingResult.devices.length > 0) {
             const deviceStats = deviceParser.getDeviceStatistics(deviceParsingResult.devices);
             logger.debug('Device statistics', deviceStats);
@@ -196,15 +204,22 @@ app.post('/tokendata', async (req, res) => {
                     details: 'All devices failed JSON transformation'
                 });
             }
-            
-            // Log successful JSON transformation
-            logger.info('JSON transformation completed', {
-                totalDevices: jsonTransformResult.totalCount,
-                successfulTransformations: jsonTransformResult.successCount,
-                failedTransformations: jsonTransformResult.errorCount
-            });
-            
-            // Get JSON statistics for logging
+             // Log JSON transformation summary (only if there are issues or at debug level)
+            if (jsonTransformResult.errorCount > 0) {
+                logger.info('JSON transformation completed', {
+                    totalDevices: jsonTransformResult.totalCount,
+                    successfulTransformations: jsonTransformResult.successCount,
+                    failedTransformations: jsonTransformResult.errorCount
+                });
+            } else {
+                logger.debug('JSON transformation completed', {
+                    totalDevices: jsonTransformResult.totalCount,
+                    successfulTransformations: jsonTransformResult.successCount,
+                    failedTransformations: jsonTransformResult.errorCount
+                });
+            }
+
+            // Get JSON statistics for debug logging only
             if (jsonTransformResult.payloads.length > 0) {
                 const jsonStats = jsonTransformer.getJsonStatistics(jsonTransformResult.payloads);
                 logger.debug('JSON payload statistics', jsonStats);
@@ -213,7 +228,7 @@ app.post('/tokendata', async (req, res) => {
             // Task 11: Implement MQTT publishing
             if (jsonTransformResult.payloads.length > 0) {
                 try {
-                    logger.info('Publishing device data to MQTT broker', {
+                    logger.debug('Publishing device data to MQTT broker', {
                         payloadCount: jsonTransformResult.payloads.length,
                         firstDeviceMac: jsonTransformResult.payloads[0]?.mac_address,
                         gatewayInfo: {
@@ -225,7 +240,7 @@ app.post('/tokendata', async (req, res) => {
                     // Publish all JSON payloads to MQTT
                     const mqttResults = await mqttClient.publishMultipleDeviceData(jsonTransformResult.payloads);
                     
-                    // Log MQTT publishing results
+                    // Log MQTT publishing results - only errors at INFO level
                     if (mqttResults.errorCount > 0) {
                         logger.warn('Some MQTT publications failed', {
                             totalPayloads: mqttResults.totalCount,
@@ -243,7 +258,8 @@ app.post('/tokendata', async (req, res) => {
                         // Note: We don't return an error response here as the data was processed successfully
                         // MQTT publishing failures are logged but don't affect the HTTP response
                     } else {
-                        logger.info('MQTT publishing completed successfully', {
+                        // Success logging moved to debug level
+                        logger.debug('MQTT publishing completed successfully', {
                             totalPayloads: mqttResults.totalCount,
                             successfulPublications: mqttResults.successCount,
                             failedPublications: mqttResults.errorCount
@@ -277,7 +293,7 @@ app.post('/tokendata', async (req, res) => {
             });
             
             await mqttClient.publishGatewayData(parsedData.gatewayInfo);
-            logger.info('Gateway status published to MQTT successfully');
+            logger.debug('Gateway status published to MQTT successfully');
             
         } catch (gatewayMqttError) {
             logger.error('Gateway MQTT publishing failed', {
@@ -288,7 +304,22 @@ app.post('/tokendata', async (req, res) => {
             // Gateway MQTT publishing failures are logged but don't affect the HTTP response
         }
         
-        // Log that we processed the data successfully
+        // Log that we processed the data successfully with consolidated summary
+        logger.info('POST request processed successfully', {
+            devices: {
+                total: deviceParsingResult.totalCount,
+                successful: deviceParsingResult.successCount,
+                failed: deviceParsingResult.errorCount
+            },
+            gateway: {
+                version: parsedData.gatewayInfo.version,
+                messageId: parsedData.gatewayInfo.messageId,
+                ip: parsedData.gatewayInfo.ip,
+                mac: parsedData.gatewayInfo.mac
+            }
+        });
+        
+        // Keep the detailed logging for compatibility with existing log processing
         logger.logProcessingSuccess(deviceParsingResult.successCount, {
             version: parsedData.gatewayInfo.version,
             messageId: parsedData.gatewayInfo.messageId,
@@ -345,12 +376,45 @@ app.use((req, res) => {
     });
 });
 
+// Store timer reference for cleanup
+let discoveryTimer = null;
+
 // Initialize MQTT client connection
 async function initializeApplication() {
     try {
         logger.info('Initializing MQTT client connection...');
         await mqttClient.initializeMqttClient();
         logger.info('MQTT client connected successfully');
+        
+        // Publish Home Assistant discovery messages if enabled
+        if (config.homeAssistant.enabled) {
+            logger.info('Home Assistant integration is enabled. Publishing discovery messages...');
+            try {
+                const publishedCount = await haDiscovery.publishDiscoveryMessages(mqttClient);
+                logger.info(`Published Home Assistant discovery messages for ${publishedCount} devices`);
+            } catch (haError) {
+                logger.error('Failed to publish Home Assistant discovery messages', {
+                    error: haError.message
+                });
+            }
+            
+            // Set up periodic discovery message publishing (every minute)
+            // This ensures any newly configured devices get discovery messages
+            discoveryTimer = setInterval(async () => {
+                try {
+                    const publishedCount = await haDiscovery.publishDiscoveryMessages(mqttClient);
+                    if (publishedCount > 0) {
+                        logger.info(`Published Home Assistant discovery messages for ${publishedCount} new devices`);
+                    }
+                } catch (haError) {
+                    logger.error('Failed to publish periodic Home Assistant discovery messages', {
+                        error: haError.message
+                    });
+                }
+            }, 60000); // 60 seconds
+        } else {
+            logger.info('Home Assistant integration is disabled');
+        }
     } catch (error) {
         logger.error('Failed to initialize MQTT client', {
             error: error.message,
@@ -361,12 +425,53 @@ async function initializeApplication() {
     }
 }
 
+// Shutdown function to clean up resources
+async function shutdown() {
+    logger.info('Shutting down application...');
+    
+    // Clear the discovery timer
+    if (discoveryTimer) {
+        clearInterval(discoveryTimer);
+        discoveryTimer = null;
+        logger.info('Cleared discovery timer');
+    }
+    
+    // Disconnect MQTT client
+    try {
+        await mqttClient.disconnect();
+        logger.info('MQTT client disconnected');
+    } catch (error) {
+        logger.error('Error disconnecting MQTT client', { error: error.message });
+    }
+    
+    logger.info('Application shutdown complete');
+}
+
 // Start the HTTP server
-app.listen(config.server.port, async () => {
+app.listen(config.server.port, config.server.host, async () => {
     logger.logStartup(config.server.port);
-    logger.info(`POST endpoint available at: http://localhost:${config.server.port}/tokendata`);
-    logger.info(`Health check available at: http://localhost:${config.server.port}/health`);
+    logger.info(`POST endpoint available at: http://${config.server.host}:${config.server.port}/tokendata`);
+    logger.info(`Health check available at: http://${config.server.host}:${config.server.port}/health`);
     
     // Initialize MQTT connection after server starts
     await initializeApplication();
 });
+
+// Handle graceful shutdown on process signals
+process.on('SIGINT', async () => {
+    logger.info('Received SIGINT, initiating graceful shutdown...');
+    await shutdown();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    logger.info('Received SIGTERM, initiating graceful shutdown...');
+    await shutdown();
+    process.exit(0);
+});
+
+// Export for testing
+module.exports = { 
+    initializeApplication,
+    shutdown
+};

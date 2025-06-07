@@ -56,9 +56,10 @@ describe('MQTT Client Module', function() {
       const macAddress = '00:11:22:33:44:55';
       const origPrefix = config.mqtt.topicPrefix;
       
-      // Test with the default prefix - should add 'device/' to the topic
+      // Test with the default prefix - should add 'state/' to the topic
+      // MAC address should be normalized (colons removed)
       const topic = mqttClient.constructTopic(macAddress);
-      expect(topic).to.equal(origPrefix + 'device/' + macAddress);
+      expect(topic).to.equal(origPrefix + 'state/' + '001122334455');
     });
     
     it('should handle prefix with trailing slash', function() {
@@ -68,13 +69,14 @@ describe('MQTT Client Module', function() {
       // Save original and restore after test
       try {
         // The prefix already has a trailing slash in default config
+        // MAC address should be normalized (colons removed)
         const topic = mqttClient.constructTopic(macAddress);
-        expect(topic).to.equal(origPrefix + 'device/' + macAddress);
+        expect(topic).to.equal(origPrefix + 'state/' + '001122334455');
         
         // Test a prefix without a trailing slash
         config.mqtt.topicPrefix = '/test/prefix';
         const topic2 = mqttClient.constructTopic(macAddress);
-        expect(topic2).to.equal('/test/prefix/device/' + macAddress);
+        expect(topic2).to.equal('/test/prefix/state/' + '001122334455');
       } finally {
         config.mqtt.topicPrefix = origPrefix;
       }
@@ -91,9 +93,9 @@ describe('MQTT Client Module', function() {
     it('should correctly construct a gateway topic', function() {
       const origPrefix = config.mqtt.topicPrefix;
       
-      // Test with the default prefix - should add 'gateway' to the topic
+      // Test with the default prefix - should add 'gateway/state' to the topic
       const topic = mqttClient.constructGatewayTopic();
-      expect(topic).to.equal(origPrefix + 'gateway');
+      expect(topic).to.equal(origPrefix + 'gateway/state');
     });
     
     it('should handle prefix with trailing slash', function() {
@@ -103,12 +105,12 @@ describe('MQTT Client Module', function() {
       try {
         // The prefix already has a trailing slash in default config
         const topic = mqttClient.constructGatewayTopic();
-        expect(topic).to.equal(origPrefix + 'gateway');
+        expect(topic).to.equal(origPrefix + 'gateway/state');
         
         // Test a prefix without a trailing slash
         config.mqtt.topicPrefix = '/test/prefix';
         const topic2 = mqttClient.constructGatewayTopic();
-        expect(topic2).to.equal('/test/prefix/gateway');
+        expect(topic2).to.equal('/test/prefix/gateway/state');
       } finally {
         config.mqtt.topicPrefix = origPrefix;
       }
@@ -195,9 +197,9 @@ describe('MQTT Client Module', function() {
         expect(result).to.be.true;
         expect(mockClient.publish.calledOnce).to.be.true;
         
-        // Verify topic construction
+        // Verify topic construction includes normalized MAC address (without colons)
         const publishArgs = mockClient.publish.firstCall.args;
-        expect(publishArgs[0]).to.include(testPayload.mac_address);
+        expect(publishArgs[0]).to.include('001122334455');
         
         // Verify message is JSON string
         expect(typeof publishArgs[1]).to.equal('string');
@@ -206,7 +208,7 @@ describe('MQTT Client Module', function() {
         
         // Verify QoS and retain options
         expect(publishArgs[2].qos).to.equal(config.mqtt.qos);
-        expect(publishArgs[2].retain).to.equal(config.mqtt.retain);
+        expect(publishArgs[2].retain).to.equal(false); // State messages should never be retained
         
         done();
       }).catch(done);
