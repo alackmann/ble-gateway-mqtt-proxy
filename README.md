@@ -44,7 +44,8 @@ Key environment variables:
 
 - `MQTT_BROKER_URL`: MQTT broker connection URL
 - `MQTT_TOPIC_PREFIX`: Topic prefix for published messages
-- `PORT`: HTTP server port (default: 3000)
+- `SERVER_PORT`: HTTP server port (default: 8000)
+- `SERVER_HOST`: Server bind address (default: 0.0.0.0 - all interfaces)
 - `LOG_LEVEL`: Logging level (debug, info, warn, error)
 
 ### Home Assistant Integration
