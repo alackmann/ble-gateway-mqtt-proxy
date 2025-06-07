@@ -53,9 +53,12 @@ Enable Home Assistant MQTT Auto Discovery with these variables:
 
 - `HA_ENABLED`: Set to `true` to enable Home Assistant integration
 - `HA_DISCOVERY_TOPIC_PREFIX`: Topic prefix for discovery messages (default: `homeassistant`)
+- `HA_GATEWAY_NAME`: Name for the gateway in Home Assistant (default: `April Brother BLE Gateway`)
 - `HA_BLE_DEVICE_X`: Define BLE devices for auto-discovery, where X is a sequential number (1, 2, 3...)
   - Format: `<MAC_WITHOUT_COLONS>,<FRIENDLY_NAME>`
   - Example: `HA_BLE_DEVICE_1=123b6a1b85ef,Car Token`
+
+When `HA_ENABLED` is `true`, both BLE devices and the gateway itself will be automatically discovered in Home Assistant.
 
 See `.env.example` for complete configuration options.
 

@@ -346,6 +346,9 @@ app.use((req, res) => {
     });
 });
 
+// Store timer reference for cleanup
+let discoveryTimer = null;
+
 // Initialize MQTT client connection
 async function initializeApplication() {
     try {
@@ -367,7 +370,7 @@ async function initializeApplication() {
             
             // Set up periodic discovery message publishing (every minute)
             // This ensures any newly configured devices get discovery messages
-            setInterval(async () => {
+            discoveryTimer = setInterval(async () => {
                 try {
                     const publishedCount = await haDiscovery.publishDiscoveryMessages(mqttClient);
                     if (publishedCount > 0) {
@@ -392,6 +395,28 @@ async function initializeApplication() {
     }
 }
 
+// Shutdown function to clean up resources
+async function shutdown() {
+    logger.info('Shutting down application...');
+    
+    // Clear the discovery timer
+    if (discoveryTimer) {
+        clearInterval(discoveryTimer);
+        discoveryTimer = null;
+        logger.info('Cleared discovery timer');
+    }
+    
+    // Disconnect MQTT client
+    try {
+        await mqttClient.disconnect();
+        logger.info('MQTT client disconnected');
+    } catch (error) {
+        logger.error('Error disconnecting MQTT client', { error: error.message });
+    }
+    
+    logger.info('Application shutdown complete');
+}
+
 // Start the HTTP server
 app.listen(config.server.port, async () => {
     logger.logStartup(config.server.port);
@@ -401,3 +426,22 @@ app.listen(config.server.port, async () => {
     // Initialize MQTT connection after server starts
     await initializeApplication();
 });
+
+// Handle graceful shutdown on process signals
+process.on('SIGINT', async () => {
+    logger.info('Received SIGINT, initiating graceful shutdown...');
+    await shutdown();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    logger.info('Received SIGTERM, initiating graceful shutdown...');
+    await shutdown();
+    process.exit(0);
+});
+
+// Export for testing
+module.exports = { 
+    initializeApplication,
+    shutdown
+};

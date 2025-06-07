@@ -19,6 +19,7 @@ services:
       # Home Assistant integration (optional)
       - HA_ENABLED=true
       - HA_DISCOVERY_TOPIC_PREFIX=homeassistant
+      - HA_GATEWAY_NAME=April Brother BLE Gateway
       - HA_BLE_DEVICE_1=123b6a1b85ef,Car Token
       - HA_BLE_DEVICE_2=aabbccddeeff,Bike Token
     depends_on:

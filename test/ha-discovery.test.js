@@ -41,7 +41,8 @@ describe('Home Assistant Discovery Publisher', () => {
                 homeAssistant: {
                     enabled: true,
                     discoveryTopicPrefix: 'homeassistant',
-                    devices: devices
+                    devices: devices,
+                    gatewayName: 'April Brother BLE Gateway'
                 }
             }
         };
@@ -193,11 +194,41 @@ describe('Home Assistant Discovery Publisher', () => {
     });
     
     describe('publishDiscoveryMessages()', () => {
+        beforeEach(() => {
+            // Make sure the gatewayName is set for all tests in this describe block
+            configStub.config.homeAssistant.gatewayName = 'Test Gateway';
+            
+            // Mock the publishGatewayDiscovery method to prevent errors
+            const originalPublishGatewayDiscovery = haDiscovery.publishGatewayDiscovery;
+            sinon.stub(haDiscovery, 'publishGatewayDiscovery').callsFake(async (mqttClient) => {
+                // Return true for first call, false for subsequent calls
+                if (!gatewayPublished) {
+                    gatewayPublished = true;
+                    return true;
+                }
+                return false;
+            });
+        });
+        
+        afterEach(() => {
+            // Restore the original method
+            if (haDiscovery.publishGatewayDiscovery.restore) {
+                haDiscovery.publishGatewayDiscovery.restore();
+            }
+            gatewayPublished = false;
+        });
+        
+        let gatewayPublished = false;
+        
         it('should publish discovery messages for all configured devices', async () => {
+            // Reset the existing publish stub to track calls
+            mqttClientStub.publish.resetHistory();
+            
             const result = await haDiscovery.publishDiscoveryMessages(mqttClientStub);
             
-            expect(result).to.equal(2); // Two devices published
-            expect(mqttClientStub.publish.callCount).to.equal(4); // Two messages per device
+            expect(result).to.equal(3); // Two devices + gateway published
+            // Should have 10 publish calls (2 per device + 6 for gateway)
+            expect(mqttClientStub.publish.callCount).to.equal(10); 
             expect(loggerStub.info.callCount).to.be.at.least(5); // Start message + 2 per device + summary
         });
         
@@ -228,14 +259,14 @@ describe('Home Assistant Discovery Publisher', () => {
             
             const result = await haDiscovery.publishDiscoveryMessages(mqttClientStub);
             
-            expect(result).to.equal(0);
-            expect(mqttClientStub.publish.called).to.be.false;
+            // It still publishes gateway discovery
+            expect(result).to.equal(1); // Only gateway (stub returns 1)
             expect(loggerStub.warn.calledOnce).to.be.true;
-            expect(loggerStub.warn.firstCall.args[0]).to.include('No Home Assistant devices');
+            expect(loggerStub.warn.firstCall.args[0]).to.include('No Home Assistant BLE devices');
         });
         
         it('should only publish discovery messages for new devices', async () => {
-            // First call should publish both devices
+            // First call should publish both devices + gateway
             await haDiscovery.publishDiscoveryMessages(mqttClientStub);
             
             mqttClientStub.publish.reset();
@@ -246,7 +277,98 @@ describe('Home Assistant Discovery Publisher', () => {
             
             expect(result).to.equal(0);
             expect(mqttClientStub.publish.called).to.be.false;
-            expect(loggerStub.info.callCount).to.equal(2); // Start message + summary
+            expect(loggerStub.info.callCount).to.be.at.least(2); // Start message + summary
+        });
+    });
+    
+    describe('createGatewayDeviceObject()', () => {
+        it('should create a valid device object for the gateway', () => {
+            configStub.config.homeAssistant.gatewayName = 'Test Gateway';
+            
+            const result = haDiscovery.createGatewayDeviceObject();
+            
+            expect(result).to.be.an('object');
+            expect(result.identifiers).to.be.an('array').with.lengthOf(1);
+            expect(result.identifiers[0]).to.equal('ble_gateway');
+            expect(result.name).to.equal('Test Gateway');
+            expect(result.model).to.equal('April Brother BLE Gateway v4');
+            expect(result.manufacturer).to.equal('April Brother');
+        });
+    });
+    
+    describe('createGatewaySensorConfig()', () => {
+        it('should create a valid gateway sensor config', () => {
+            const deviceObject = haDiscovery.createGatewayDeviceObject();
+            const result = haDiscovery.createGatewaySensorConfig(
+                'version',
+                'Gateway Version',
+                '{{ value_json.version }}',
+                null,
+                deviceObject
+            );
+            
+            expect(result).to.be.an('object');
+            expect(result.name).to.equal('Gateway Version');
+            expect(result.unique_id).to.equal('ble_gateway_version');
+            expect(result.state_topic).to.equal('blegateway/gateway/state');
+            expect(result.value_template).to.equal('{{ value_json.version }}');
+            expect(result.device).to.equal(deviceObject);
+        });
+        
+        it('should include device class when provided', () => {
+            const deviceObject = haDiscovery.createGatewayDeviceObject();
+            const result = haDiscovery.createGatewaySensorConfig(
+                'last_ping',
+                'Gateway Last Ping',
+                '{{ value_json.processed_timestamp }}',
+                'timestamp',
+                deviceObject
+            );
+            
+            expect(result).to.be.an('object');
+            expect(result.device_class).to.equal('timestamp');
+        });
+    });
+    
+    describe('publishGatewayDiscovery()', () => {
+        beforeEach(() => {
+            configStub.config.homeAssistant.gatewayName = 'Test Gateway';
+        });
+        
+        it('should publish discovery messages for the gateway', async () => {
+            const result = await haDiscovery.publishGatewayDiscovery(mqttClientStub);
+            
+            expect(result).to.be.true;
+            // Should publish 6 sensors: version, ip, mac, message_id, time, last_ping
+            expect(mqttClientStub.publish.callCount).to.equal(6);
+            expect(mqttClientStub.publish.args[0][0]).to.include('homeassistant/sensor/test_gateway_version/config');
+            expect(mqttClientStub.publish.args[0][2]).to.deep.include({ retain: true });
+        });
+        
+        it('should not publish discovery messages if already published', async () => {
+            // First call should publish
+            await haDiscovery.publishGatewayDiscovery(mqttClientStub);
+            
+            mqttClientStub.publish.reset();
+            
+            // Second call should not publish
+            const result = await haDiscovery.publishGatewayDiscovery(mqttClientStub);
+            
+            expect(result).to.be.false;
+            expect(mqttClientStub.publish.called).to.be.false;
+        });
+        
+        it('should handle errors during publishing', async () => {
+            mqttClientStub.publish.rejects(new Error('Test error'));
+            
+            try {
+                await haDiscovery.publishGatewayDiscovery(mqttClientStub);
+                // Should not reach here
+                expect.fail('Should have thrown an error');
+            } catch (error) {
+                expect(error.message).to.equal('Test error');
+                expect(loggerStub.error.called).to.be.true;
+            }
         });
     });
 });

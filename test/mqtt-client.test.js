@@ -91,9 +91,9 @@ describe('MQTT Client Module', function() {
     it('should correctly construct a gateway topic', function() {
       const origPrefix = config.mqtt.topicPrefix;
       
-      // Test with the default prefix - should add 'gateway' to the topic
+      // Test with the default prefix - should add 'gateway/state' to the topic
       const topic = mqttClient.constructGatewayTopic();
-      expect(topic).to.equal(origPrefix + 'gateway');
+      expect(topic).to.equal(origPrefix + 'gateway/state');
     });
     
     it('should handle prefix with trailing slash', function() {
@@ -103,12 +103,12 @@ describe('MQTT Client Module', function() {
       try {
         // The prefix already has a trailing slash in default config
         const topic = mqttClient.constructGatewayTopic();
-        expect(topic).to.equal(origPrefix + 'gateway');
+        expect(topic).to.equal(origPrefix + 'gateway/state');
         
         // Test a prefix without a trailing slash
         config.mqtt.topicPrefix = '/test/prefix';
         const topic2 = mqttClient.constructGatewayTopic();
-        expect(topic2).to.equal('/test/prefix/gateway');
+        expect(topic2).to.equal('/test/prefix/gateway/state');
       } finally {
         config.mqtt.topicPrefix = origPrefix;
       }

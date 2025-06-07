@@ -10,6 +10,15 @@ if (process.env.NODE_ENV !== 'test') {
     require('dotenv').config();
 }
 
+// Import logger but handle circular dependency
+let logger;
+try {
+    logger = require('./logger');
+} catch (error) {
+    // If there's a circular dependency, use console as fallback
+    logger = console;
+}
+
 /**
  * Configuration object with all required parameters
  */
@@ -39,6 +48,7 @@ const config = {
         enabled: process.env.HA_ENABLED === 'true' || false,
         discoveryTopicPrefix: process.env.HA_DISCOVERY_TOPIC_PREFIX || 'homeassistant',
         devices: parseHomeAssistantDevices(),
+        gatewayName: process.env.HA_GATEWAY_NAME || 'April Brother BLE Gateway'
     },
 };
 
@@ -51,34 +61,46 @@ const config = {
 function parseHomeAssistantDevices() {
     const deviceMap = new Map();
     
-    if (process.env.NODE_ENV === 'test') {
-        return deviceMap; // Skip in test environment unless tests specifically set env vars
-    }
+    // In test environment, don't automatically skip parsing
+    // Tests will explicitly set process.env.HA_BLE_DEVICE_X values if needed
     
-    let index = 1;
-    let deviceEnvVar = process.env[`HA_BLE_DEVICE_${index}`];
+    // Check for environment variables with pattern HA_BLE_DEVICE_X
+    // where X is any number (non-sequential numbers are allowed)
+    const deviceVarPattern = /^HA_BLE_DEVICE_(\d+)$/;
+    const deviceVars = Object.keys(process.env)
+        .filter(key => deviceVarPattern.test(key))
+        .sort((a, b) => {
+            const numA = parseInt(a.match(deviceVarPattern)[1]);
+            const numB = parseInt(b.match(deviceVarPattern)[1]);
+            return numA - numB;
+        });
     
-    while (deviceEnvVar && index <= 100) { // Set a reasonable upper limit
+    for (const deviceVar of deviceVars) {
         try {
+            const deviceEnvVar = process.env[deviceVar];
             const [mac, name] = deviceEnvVar.split(',').map(part => part.trim());
             
             if (!mac || !name) {
-                throw new Error(`Invalid format for HA_BLE_DEVICE_${index}: ${deviceEnvVar}. Expected format: "MAC,Name"`);
+                throw new Error(`Invalid format for ${deviceVar}: ${deviceEnvVar}. Expected format: "MAC,Name"`);
             }
+            
+            // Remove colons if present
+            const macWithoutColons = mac.replace(/:/g, '');
             
             // Basic MAC validation (without colons)
-            if (!/^[0-9a-fA-F]{12}$/.test(mac)) {
-                throw new Error(`Invalid MAC address format in HA_BLE_DEVICE_${index}: ${mac}. Expected 12 hex characters without colons.`);
+            if (!/^[0-9a-fA-F]{12}$/.test(macWithoutColons)) {
+                throw new Error(`Invalid MAC address format in ${deviceVar}: ${mac}. Expected 12 hex characters with or without colons.`);
             }
             
-            deviceMap.set(mac.toLowerCase(), { name });
+            deviceMap.set(macWithoutColons.toLowerCase(), { name });
             
         } catch (error) {
-            console.error(`Error parsing HA_BLE_DEVICE_${index}: ${error.message}`);
+            if (logger.error) {
+                logger.error(`Error parsing ${deviceVar}: ${error.message}`);
+            } else {
+                console.error(`Error parsing ${deviceVar}: ${error.message}`);
+            }
         }
-        
-        index++;
-        deviceEnvVar = process.env[`HA_BLE_DEVICE_${index}`];
     }
     
     return deviceMap;
@@ -100,7 +122,7 @@ function validateConfig() {
 
     if (config.homeAssistant.enabled) {
         if (config.homeAssistant.devices.size === 0) {
-            warnings.push('HA_ENABLED is true but no HA_BLE_DEVICE_X variables were found or valid');
+            warnings.push('HA_ENABLED is true but no HA_BLE_DEVICE_X variables were found');
         }
     }
 
@@ -118,32 +140,37 @@ function get(path) {
  * Log configuration status
  */
 function logConfigStatus() {
-    console.log('Configuration loaded:');
-    console.log(`  Server Port: ${config.server.port}`);
-    console.log(`  MQTT Broker: ${config.mqtt.brokerUrl}`);
-    console.log(`  MQTT Topic Prefix: ${config.mqtt.topicPrefix}`);
-    console.log(`  Log Level: ${config.logging.level}`);
+    // Use logger if available, otherwise fallback to console
+    const log = logger.info ? logger : console;
+    
+    log.info('Configuration loaded:');
+    log.info(`  Server Port: ${config.server.port}`);
+    log.info(`  MQTT Broker: ${config.mqtt.brokerUrl}`);
+    log.info(`  MQTT Topic Prefix: ${config.mqtt.topicPrefix}`);
+    log.info(`  Log Level: ${config.logging.level}`);
     
     // Home Assistant configuration logging
     if (config.homeAssistant.enabled) {
-        console.log('Home Assistant Integration:');
-        console.log(`  Discovery Topic Prefix: ${config.homeAssistant.discoveryTopicPrefix}`);
-        console.log(`  Configured Devices: ${config.homeAssistant.devices.size}`);
+        log.info('Home Assistant Integration:');
+        log.info(`  Discovery Topic Prefix: ${config.homeAssistant.discoveryTopicPrefix}`);
+        log.info(`  Gateway Name: ${config.homeAssistant.gatewayName}`);
+        log.info(`  Configured BLE Devices: ${config.homeAssistant.devices.size}`);
         
         if (config.homeAssistant.devices.size > 0) {
-            console.log('  Devices:');
+            log.info('  BLE Devices:');
             config.homeAssistant.devices.forEach((device, mac) => {
-                console.log(`    - ${device.name} (${mac})`);
+                log.info(`    - ${device.name} (${mac})`);
             });
         }
     } else {
-        console.log('Home Assistant Integration: Disabled');
+        log.info('Home Assistant Integration: Disabled');
     }
     
     const warnings = validateConfig();
     if (warnings.length > 0) {
-        console.warn('Configuration warnings:');
-        warnings.forEach(warning => console.warn(`  - ${warning}`));
+        const warn = logger.warn ? logger.warn : console.warn;
+        warn('Configuration warnings:');
+        warnings.forEach(warning => warn(`  - ${warning}`));
     }
 }
 

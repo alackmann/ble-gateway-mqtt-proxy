@@ -331,7 +331,7 @@ function publishGatewayData(gatewayData) {
             // Publish options
             const publishOptions = {
                 qos: config.mqtt.qos,
-                retain: config.mqtt.retain
+                retain: false // Never retain gateway state messages
             };
             
             logger.debug('Publishing gateway data to MQTT', {
@@ -409,8 +409,8 @@ function constructGatewayTopic() {
         topicPrefix += '/';
     }
 
-    // Construct topic: <MQTT_TOPIC_PREFIX>gateway
-    const topic = `${topicPrefix}gateway`;
+    // Construct topic: <MQTT_TOPIC_PREFIX>gateway/state
+    const topic = `${topicPrefix}gateway/state`;
     
     logger.debug('Constructed gateway MQTT topic', {
         topicPrefix: topicPrefix,

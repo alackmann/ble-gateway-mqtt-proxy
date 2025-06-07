@@ -137,6 +137,7 @@ describe('Home Assistant Configuration Parsing', () => {
         it('should handle non-sequential HA_BLE_DEVICE_X variables', () => {
             process.env.HA_BLE_DEVICE_1 = '123b6a1b85ef,Car Token';
             process.env.HA_BLE_DEVICE_3 = 'aabbccddeeff,Bike Token'; // Skip 2
+            process.env.HA_BLE_DEVICE_5 = '112233445566,Extra Token'; // Skip 4
             
             configModule = proxyquire('../src/config', {
                 './logger': mockLogger,
@@ -144,16 +145,17 @@ describe('Home Assistant Configuration Parsing', () => {
             });
             
             const devices = configModule.config.homeAssistant.devices;
-            expect(devices.size).to.equal(2);
+            expect(devices.size).to.equal(3);
             expect(devices.has('123b6a1b85ef')).to.be.true;
             expect(devices.has('aabbccddeeff')).to.be.true;
+            expect(devices.has('112233445566')).to.be.true;
         });
         
-        it('should stop iterating at the first missing HA_BLE_DEVICE_X variable', () => {
+        it('should parse non-sequential HA_BLE_DEVICE_X variables', () => {
             process.env.HA_BLE_DEVICE_1 = '123b6a1b85ef,Car Token';
             process.env.HA_BLE_DEVICE_2 = 'aabbccddeeff,Bike Token';
             // Skip HA_BLE_DEVICE_3
-            process.env.HA_BLE_DEVICE_4 = '112233445566,Ignored Token'; // Should be ignored
+            process.env.HA_BLE_DEVICE_4 = '112233445566,Found Token'; // Should be found despite gap
             
             configModule = proxyquire('../src/config', {
                 './logger': mockLogger,
@@ -161,10 +163,10 @@ describe('Home Assistant Configuration Parsing', () => {
             });
             
             const devices = configModule.config.homeAssistant.devices;
-            expect(devices.size).to.equal(2);
+            expect(devices.size).to.equal(3);
             expect(devices.has('123b6a1b85ef')).to.be.true;
             expect(devices.has('aabbccddeeff')).to.be.true;
-            expect(devices.has('112233445566')).to.be.false;
+            expect(devices.has('112233445566')).to.be.true;
         });
         
         it('should handle MAC addresses with existing colons', () => {
@@ -238,7 +240,7 @@ describe('Home Assistant Configuration Parsing', () => {
             
             // Should log that HA is enabled and show device details
             expect(mockLogger.info.calledWith('Home Assistant Integration:')).to.be.true;
-            expect(mockLogger.info.calledWith('  Configured Devices: 1')).to.be.true;
+            expect(mockLogger.info.calledWith(`  Configured BLE Devices: 1`)).to.be.true;
         });
         
         it('should log that Home Assistant is disabled when HA_ENABLED is false', () => {
