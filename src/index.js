@@ -11,6 +11,7 @@ const gatewayParser = require('./gateway-parser');
 const deviceParser = require('./device-parser');
 const jsonTransformer = require('./json-transformer');
 const mqttClient = require('./mqtt-client');
+const haDiscovery = require('./ha-discovery');
 
 const app = express();
 
@@ -351,6 +352,36 @@ async function initializeApplication() {
         logger.info('Initializing MQTT client connection...');
         await mqttClient.initializeMqttClient();
         logger.info('MQTT client connected successfully');
+        
+        // Publish Home Assistant discovery messages if enabled
+        if (config.homeAssistant.enabled) {
+            logger.info('Home Assistant integration is enabled. Publishing discovery messages...');
+            try {
+                const publishedCount = await haDiscovery.publishDiscoveryMessages(mqttClient);
+                logger.info(`Published Home Assistant discovery messages for ${publishedCount} devices`);
+            } catch (haError) {
+                logger.error('Failed to publish Home Assistant discovery messages', {
+                    error: haError.message
+                });
+            }
+            
+            // Set up periodic discovery message publishing (every minute)
+            // This ensures any newly configured devices get discovery messages
+            setInterval(async () => {
+                try {
+                    const publishedCount = await haDiscovery.publishDiscoveryMessages(mqttClient);
+                    if (publishedCount > 0) {
+                        logger.info(`Published Home Assistant discovery messages for ${publishedCount} new devices`);
+                    }
+                } catch (haError) {
+                    logger.error('Failed to publish periodic Home Assistant discovery messages', {
+                        error: haError.message
+                    });
+                }
+            }, 60000); // 60 seconds
+        } else {
+            logger.info('Home Assistant integration is disabled');
+        }
     } catch (error) {
         logger.error('Failed to initialize MQTT client', {
             error: error.message,

@@ -174,16 +174,18 @@ function publishDeviceData(jsonPayload) {
                 throw new Error('MQTT client not connected');
             }
 
-            // Construct topic according to FR-004.4
+            // Construct topic - now uses the new 'state/' topic format
             const topic = constructTopic(jsonPayload.mac_address);
             
             // Convert payload to JSON string
             const message = JSON.stringify(jsonPayload);
             
             // Publish options
+            // BREAKING CHANGE: Always use retain: false for state messages
+            // This overrides the MQTT_RETAIN configuration for state topics
             const publishOptions = {
                 qos: config.mqtt.qos,
-                retain: config.mqtt.retain
+                retain: false // State messages must not be retained for Home Assistant compatibility
             };
 
             logger.debug('Publishing device data to MQTT', {
@@ -368,7 +370,7 @@ function publishGatewayData(gatewayData) {
 }
 
 /**
- * Construct MQTT topic for device according to FR-004.4
+ * Construct MQTT topic for device according to Home Assistant integration spec
  * @param {string} deviceMacAddress - Device MAC address (colon-separated)
  * @returns {string} Complete MQTT topic
  */
@@ -383,8 +385,9 @@ function constructTopic(deviceMacAddress) {
         topicPrefix += '/';
     }
 
-    // Construct topic: <MQTT_TOPIC_PREFIX>device/<DEVICE_MAC_ADDRESS>
-    const topic = `${topicPrefix}device/${deviceMacAddress}`;
+    // BREAKING CHANGE: Construct topic: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS>
+    // This replaces the previous format: <MQTT_TOPIC_PREFIX>device/<DEVICE_MAC_ADDRESS>
+    const topic = `${topicPrefix}state/${deviceMacAddress}`;
     
     logger.debug('Constructed MQTT topic', {
         deviceMac: deviceMacAddress,
