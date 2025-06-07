@@ -76,8 +76,8 @@ describe('Home Assistant State Topic Publishing Integration', () => {
             const macAddress = '00:11:22:33:44:55';
             const topic = mqttClient.constructTopic(macAddress);
             
-            // Should use the new state topic format
-            expect(topic).to.equal('blegateway/state/00:11:22:33:44:55');
+            // Should use the new state topic format (MAC without colons)
+            expect(topic).to.equal('blegateway/state/001122334455');
         });
         
         it('should use the same state topic format for HA and non-HA devices', () => {
@@ -87,9 +87,9 @@ describe('Home Assistant State Topic Publishing Integration', () => {
             // Non-HA device
             const nonHaTopic = mqttClient.constructTopic('00:11:22:33:44:55');
             
-            // Both should use the same format pattern
-            expect(haTopic).to.equal('blegateway/state/12:3B:6A:1B:85:EF');
-            expect(nonHaTopic).to.equal('blegateway/state/00:11:22:33:44:55');
+            // Both should use the same format pattern (MAC without colons)
+            expect(haTopic).to.equal('blegateway/state/123B6A1B85EF');
+            expect(nonHaTopic).to.equal('blegateway/state/001122334455');
         });
     });
     
@@ -155,14 +155,14 @@ describe('Home Assistant State Topic Publishing Integration', () => {
             // Original prefix already has trailing slash
             const macAddress = '00:11:22:33:44:55';
             const topic = mqttClient.constructTopic(macAddress);
-            expect(topic).to.equal('blegateway/state/00:11:22:33:44:55');
+            expect(topic).to.equal('blegateway/state/001122334455');
             
             // Change to prefix without trailing slash
             const originalPrefix = mockConfig.config.mqtt.topicPrefix;
             mockConfig.config.mqtt.topicPrefix = 'blegateway';
             
             const topic2 = mqttClient.constructTopic(macAddress);
-            expect(topic2).to.equal('blegateway/state/00:11:22:33:44:55');
+            expect(topic2).to.equal('blegateway/state/001122334455');
             
             // Restore original prefix
             mockConfig.config.mqtt.topicPrefix = originalPrefix;
@@ -184,9 +184,9 @@ describe('Home Assistant State Topic Publishing Integration', () => {
             // Publish the payload
             await mqttClient.publishDeviceData(testPayload);
             
-            // Verify the publish was called with the correct topic
+            // Verify the publish was called with the correct topic (MAC without colons)
             const publishArgs = mockMqtt.connect().publish.firstCall.args;
-            expect(publishArgs[0]).to.equal('blegateway/state/12:3B:6A:1B:85:EF');
+            expect(publishArgs[0]).to.equal('blegateway/state/123B6A1B85EF');
             
             // Verify the message content is the full JSON payload
             const message = JSON.parse(publishArgs[1]);

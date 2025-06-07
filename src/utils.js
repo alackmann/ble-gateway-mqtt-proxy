@@ -28,6 +28,30 @@ function formatMac(macWithoutColons) {
 }
 
 /**
+ * Normalizes a MAC address by removing colons and converting to lowercase
+ * Example: "12:3B:6A:1B:85:EF" -> "123b6a1b85ef"
+ * 
+ * @param {string} macAddress - MAC address with or without colons
+ * @returns {string} MAC address without colons in lowercase format
+ * @throws {Error} If the MAC address format is invalid
+ */
+function normalizeMac(macAddress) {
+    if (!macAddress || typeof macAddress !== 'string') {
+        throw new Error('MAC address must be a non-empty string');
+    }
+    
+    // Remove colons and convert to lowercase
+    const normalizedMac = macAddress.trim().replace(/:/g, '').toLowerCase();
+    
+    // Validate the MAC has exactly 12 hex characters
+    if (!/^[0-9a-f]{12}$/.test(normalizedMac)) {
+        throw new Error(`Invalid MAC address format: ${macAddress}. Expected 12 hex characters with or without colons.`);
+    }
+    
+    return normalizedMac;
+}
+
+/**
  * Converts a string into a URL-friendly slug
  * Example: "Car Token #1" -> "car_token_1"
  * 
@@ -55,5 +79,6 @@ function slugify(text) {
 
 module.exports = {
     formatMac,
+    normalizeMac,
     slugify
 };

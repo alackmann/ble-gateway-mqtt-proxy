@@ -98,7 +98,7 @@ describe('Home Assistant Discovery Publisher', () => {
             expect(result).to.be.an('object');
             expect(result.name).to.equal('Car Token RSSI');
             expect(result.unique_id).to.equal('ble_token_123b6a1b85ef_rssi');
-            expect(result.state_topic).to.equal('blegateway/state/12:3B:6A:1B:85:EF');
+            expect(result.state_topic).to.equal('blegateway/state/123b6a1b85ef');
             expect(result.value_template).to.equal('{{ value_json.rssi | default(0) }}');
             expect(result.unit_of_measurement).to.equal('dBm');
             expect(result.device_class).to.equal('signal_strength');
@@ -120,7 +120,7 @@ describe('Home Assistant Discovery Publisher', () => {
             expect(result).to.be.an('object');
             expect(result.name).to.equal('Car Token Last Seen');
             expect(result.unique_id).to.equal('ble_token_123b6a1b85ef_last_seen');
-            expect(result.state_topic).to.equal('blegateway/state/12:3B:6A:1B:85:EF');
+            expect(result.state_topic).to.equal('blegateway/state/123b6a1b85ef');
             expect(result.value_template).to.equal('{{ value_json.last_seen_timestamp }}');
             expect(result.device_class).to.equal('timestamp');
             expect(result.expire_after).to.equal(300);

@@ -437,7 +437,7 @@ function publish(topic, message, options = {}) {
 
 /**
  * Construct MQTT topic for device according to Home Assistant integration spec
- * @param {string} deviceMacAddress - Device MAC address (colon-separated)
+ * @param {string} deviceMacAddress - Device MAC address (with or without colons, will be normalized to no colons)
  * @returns {string} Complete MQTT topic
  */
 function constructTopic(deviceMacAddress) {
@@ -445,18 +445,22 @@ function constructTopic(deviceMacAddress) {
         throw new Error('Invalid MAC address for topic construction');
     }
 
+    // Normalize MAC address to remove colons for consistent topic structure
+    const macWithoutColons = deviceMacAddress.replace(/:/g, '');
+
     // Ensure topic prefix ends with a separator if it doesn't already
     let topicPrefix = config.mqtt.topicPrefix;
     if (topicPrefix && !topicPrefix.endsWith('/')) {
         topicPrefix += '/';
     }
 
-    // BREAKING CHANGE: Construct topic: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS>
-    // This replaces the previous format: <MQTT_TOPIC_PREFIX>device/<DEVICE_MAC_ADDRESS>
-    const topic = `${topicPrefix}state/${deviceMacAddress}`;
+    // BREAKING CHANGE: Construct topic: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_NO_COLONS>
+    // This replaces the previous format: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_WITH_COLONS>
+    const topic = `${topicPrefix}state/${macWithoutColons}`;
     
     logger.debug('Constructed MQTT topic', {
-        deviceMac: deviceMacAddress,
+        originalMac: deviceMacAddress,
+        normalizedMac: macWithoutColons,
         topicPrefix: topicPrefix,
         fullTopic: topic
     });
