@@ -87,8 +87,8 @@ describe('Home Assistant State Topic Publishing Integration', () => {
             // Non-HA device
             const nonHaTopic = mqttClient.constructTopic('00:11:22:33:44:55');
             
-            // Both should use the same format pattern (MAC without colons)
-            expect(haTopic).to.equal('blegateway/state/123B6A1B85EF');
+            // Both should use the same format pattern (MAC without colons, lowercase)
+            expect(haTopic).to.equal('blegateway/state/123b6a1b85ef');
             expect(nonHaTopic).to.equal('blegateway/state/001122334455');
         });
     });
@@ -184,9 +184,9 @@ describe('Home Assistant State Topic Publishing Integration', () => {
             // Publish the payload
             await mqttClient.publishDeviceData(testPayload);
             
-            // Verify the publish was called with the correct topic (MAC without colons)
+            // Verify the publish was called with the correct topic (MAC without colons, lowercase)
             const publishArgs = mockMqtt.connect().publish.firstCall.args;
-            expect(publishArgs[0]).to.equal('blegateway/state/123B6A1B85EF');
+            expect(publishArgs[0]).to.equal('blegateway/state/123b6a1b85ef');
             
             // Verify the message content is the full JSON payload
             const message = JSON.parse(publishArgs[1]);

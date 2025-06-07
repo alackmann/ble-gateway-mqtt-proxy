@@ -15,13 +15,13 @@ let gatewayDiscoveryPublished = false;
 /**
  * Creates the common device object for Home Assistant discovery
  * 
- * @param {string} macWithoutColons - MAC address without colons
+ * @param {string} macWithoutColons - MAC address without colons (lowercase, normalized)
  * @param {string} friendlyName - Friendly name for the device
  * @returns {Object} Device object for Home Assistant
  */
 function createDeviceObject(macWithoutColons, friendlyName) {
     return {
-        identifiers: [`ble_token_${macWithoutColons}`],
+        identifiers: [macWithoutColons],
         name: friendlyName,
         model: "April Brother BLE Gateway v4 Token",
         manufacturer: "April Brother"

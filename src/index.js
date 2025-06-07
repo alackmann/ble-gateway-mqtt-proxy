@@ -150,15 +150,22 @@ app.post('/tokendata', async (req, res) => {
                 details: 'All devices in the array had parsing errors'
             });
         }
-        
-        // Log successful device parsing
-        logger.info('Device parsing completed', {
-            totalDevices: deviceParsingResult.totalCount,
-            successfulDevices: deviceParsingResult.successCount,
-            failedDevices: deviceParsingResult.errorCount
-        });
-        
-        // Get device statistics for logging
+         // Log device parsing summary (only if there are issues or at debug level)
+        if (deviceParsingResult.errorCount > 0) {
+            logger.info('Device parsing completed', {
+                totalDevices: deviceParsingResult.totalCount,
+                successfulDevices: deviceParsingResult.successCount,
+                failedDevices: deviceParsingResult.errorCount
+            });
+        } else {
+            logger.debug('Device parsing completed', {
+                totalDevices: deviceParsingResult.totalCount,
+                successfulDevices: deviceParsingResult.successCount,
+                failedDevices: deviceParsingResult.errorCount
+            });
+        }
+
+        // Get device statistics for debug logging only
         if (deviceParsingResult.devices.length > 0) {
             const deviceStats = deviceParser.getDeviceStatistics(deviceParsingResult.devices);
             logger.debug('Device statistics', deviceStats);
@@ -197,15 +204,22 @@ app.post('/tokendata', async (req, res) => {
                     details: 'All devices failed JSON transformation'
                 });
             }
-            
-            // Log successful JSON transformation
-            logger.info('JSON transformation completed', {
-                totalDevices: jsonTransformResult.totalCount,
-                successfulTransformations: jsonTransformResult.successCount,
-                failedTransformations: jsonTransformResult.errorCount
-            });
-            
-            // Get JSON statistics for logging
+             // Log JSON transformation summary (only if there are issues or at debug level)
+            if (jsonTransformResult.errorCount > 0) {
+                logger.info('JSON transformation completed', {
+                    totalDevices: jsonTransformResult.totalCount,
+                    successfulTransformations: jsonTransformResult.successCount,
+                    failedTransformations: jsonTransformResult.errorCount
+                });
+            } else {
+                logger.debug('JSON transformation completed', {
+                    totalDevices: jsonTransformResult.totalCount,
+                    successfulTransformations: jsonTransformResult.successCount,
+                    failedTransformations: jsonTransformResult.errorCount
+                });
+            }
+
+            // Get JSON statistics for debug logging only
             if (jsonTransformResult.payloads.length > 0) {
                 const jsonStats = jsonTransformer.getJsonStatistics(jsonTransformResult.payloads);
                 logger.debug('JSON payload statistics', jsonStats);
@@ -214,7 +228,7 @@ app.post('/tokendata', async (req, res) => {
             // Task 11: Implement MQTT publishing
             if (jsonTransformResult.payloads.length > 0) {
                 try {
-                    logger.info('Publishing device data to MQTT broker', {
+                    logger.debug('Publishing device data to MQTT broker', {
                         payloadCount: jsonTransformResult.payloads.length,
                         firstDeviceMac: jsonTransformResult.payloads[0]?.mac_address,
                         gatewayInfo: {
@@ -226,7 +240,7 @@ app.post('/tokendata', async (req, res) => {
                     // Publish all JSON payloads to MQTT
                     const mqttResults = await mqttClient.publishMultipleDeviceData(jsonTransformResult.payloads);
                     
-                    // Log MQTT publishing results
+                    // Log MQTT publishing results - only errors at INFO level
                     if (mqttResults.errorCount > 0) {
                         logger.warn('Some MQTT publications failed', {
                             totalPayloads: mqttResults.totalCount,
@@ -244,7 +258,8 @@ app.post('/tokendata', async (req, res) => {
                         // Note: We don't return an error response here as the data was processed successfully
                         // MQTT publishing failures are logged but don't affect the HTTP response
                     } else {
-                        logger.info('MQTT publishing completed successfully', {
+                        // Success logging moved to debug level
+                        logger.debug('MQTT publishing completed successfully', {
                             totalPayloads: mqttResults.totalCount,
                             successfulPublications: mqttResults.successCount,
                             failedPublications: mqttResults.errorCount
@@ -278,7 +293,7 @@ app.post('/tokendata', async (req, res) => {
             });
             
             await mqttClient.publishGatewayData(parsedData.gatewayInfo);
-            logger.info('Gateway status published to MQTT successfully');
+            logger.debug('Gateway status published to MQTT successfully');
             
         } catch (gatewayMqttError) {
             logger.error('Gateway MQTT publishing failed', {
@@ -289,7 +304,22 @@ app.post('/tokendata', async (req, res) => {
             // Gateway MQTT publishing failures are logged but don't affect the HTTP response
         }
         
-        // Log that we processed the data successfully
+        // Log that we processed the data successfully with consolidated summary
+        logger.info('POST request processed successfully', {
+            devices: {
+                total: deviceParsingResult.totalCount,
+                successful: deviceParsingResult.successCount,
+                failed: deviceParsingResult.errorCount
+            },
+            gateway: {
+                version: parsedData.gatewayInfo.version,
+                messageId: parsedData.gatewayInfo.messageId,
+                ip: parsedData.gatewayInfo.ip,
+                mac: parsedData.gatewayInfo.mac
+            }
+        });
+        
+        // Keep the detailed logging for compatibility with existing log processing
         logger.logProcessingSuccess(deviceParsingResult.successCount, {
             version: parsedData.gatewayInfo.version,
             messageId: parsedData.gatewayInfo.messageId,

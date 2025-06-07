@@ -6,6 +6,7 @@
 const mqtt = require('mqtt');
 const { config } = require('./config');
 const logger = require('./logger');
+const { normalizeMac } = require('./utils');
 
 // MQTT client instance
 let mqttClient = null;
@@ -288,7 +289,7 @@ function publishMultipleDeviceData(jsonPayloads) {
             }
         }
 
-        logger.info('MQTT publishing completed', {
+        logger.debug('MQTT publishing completed', {
             totalPayloads: results.totalCount,
             successfulPublications: results.successCount,
             failedPublications: results.errorCount
@@ -437,7 +438,7 @@ function publish(topic, message, options = {}) {
 
 /**
  * Construct MQTT topic for device according to Home Assistant integration spec
- * @param {string} deviceMacAddress - Device MAC address (with or without colons, will be normalized to no colons)
+ * @param {string} deviceMacAddress - Device MAC address (with or without colons, will be normalized to lowercase no colons)
  * @returns {string} Complete MQTT topic
  */
 function constructTopic(deviceMacAddress) {
@@ -445,27 +446,31 @@ function constructTopic(deviceMacAddress) {
         throw new Error('Invalid MAC address for topic construction');
     }
 
-    // Normalize MAC address to remove colons for consistent topic structure
-    const macWithoutColons = deviceMacAddress.replace(/:/g, '');
+    try {
+        // Use the consistent normalizeMac function to ensure lowercase format
+        const macWithoutColons = normalizeMac(deviceMacAddress);
 
-    // Ensure topic prefix ends with a separator if it doesn't already
-    let topicPrefix = config.mqtt.topicPrefix;
-    if (topicPrefix && !topicPrefix.endsWith('/')) {
-        topicPrefix += '/';
+        // Ensure topic prefix ends with a separator if it doesn't already
+        let topicPrefix = config.mqtt.topicPrefix;
+        if (topicPrefix && !topicPrefix.endsWith('/')) {
+            topicPrefix += '/';
+        }
+
+        // BREAKING CHANGE: Construct topic: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_NO_COLONS_LOWERCASE>
+        // This replaces the previous format: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_WITH_COLONS>
+        const topic = `${topicPrefix}state/${macWithoutColons}`;
+        
+        logger.debug('Constructed MQTT topic', {
+            originalMac: deviceMacAddress,
+            normalizedMac: macWithoutColons,
+            topicPrefix: topicPrefix,
+            fullTopic: topic
+        });
+
+        return topic;
+    } catch (error) {
+        throw new Error(`Failed to construct MQTT topic: ${error.message}`);
     }
-
-    // BREAKING CHANGE: Construct topic: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_NO_COLONS>
-    // This replaces the previous format: <MQTT_TOPIC_PREFIX>state/<DEVICE_MAC_ADDRESS_WITH_COLONS>
-    const topic = `${topicPrefix}state/${macWithoutColons}`;
-    
-    logger.debug('Constructed MQTT topic', {
-        originalMac: deviceMacAddress,
-        normalizedMac: macWithoutColons,
-        topicPrefix: topicPrefix,
-        fullTopic: topic
-    });
-
-    return topic;
 }
 
 /**

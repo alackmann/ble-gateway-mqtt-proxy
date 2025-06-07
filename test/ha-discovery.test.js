@@ -78,7 +78,7 @@ describe('Home Assistant Discovery Publisher', () => {
             
             expect(result).to.be.an('object');
             expect(result.identifiers).to.be.an('array').with.lengthOf(1);
-            expect(result.identifiers[0]).to.equal('ble_token_123b6a1b85ef');
+            expect(result.identifiers[0]).to.equal('123b6a1b85ef');
             expect(result.name).to.equal('Car Token');
             expect(result.model).to.equal('April Brother BLE Gateway v4 Token');
             expect(result.manufacturer).to.equal('April Brother');
