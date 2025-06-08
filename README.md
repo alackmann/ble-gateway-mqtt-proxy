@@ -109,6 +109,20 @@ npm test
 npm run dev
 ```
 
+**Create a new release:**
+```bash
+npm run release
+```
+
+The release script will guide you through creating a new tagged release. It:
+- Validates you're on the main branch with a clean working directory
+- Prompts for a semantic version (e.g., v1.2.3)
+- Creates and pushes the tag to trigger automated CI/CD
+- Builds and publishes Docker images
+- Creates a GitHub release
+
+See [`docs/CICD_RELEASE_PROCESS.md`](docs/CICD_RELEASE_PROCESS.md) for detailed CI/CD information.
+
 ## Status
 
 ✅ **Production Ready** - Successfully processing real hardware data from BLE Gateway V4
