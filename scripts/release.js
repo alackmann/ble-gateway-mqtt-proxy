@@ -3,11 +3,17 @@
 /**
  * Release tagging script for BLE Gateway MQTT Proxy
  * 
- * This script helps create and push release tags with proper validation:
- * - Ensures we're on the main branch
+ * This script creates and pushes release tags with proper validation:
+ * - Ensures we're on the main branch and up to date
+ * - Uses version from package.json (should be updated via prepare-release first)
  * - Validates semantic versioning format
  * - Creates annotated git tags
- * - Pushes tags to origin
+ * - Pushes tags to origin to trigger release workflow
+ * 
+ * USAGE:
+ * 1. First run: npm run prepare-release (creates version bump PR)
+ * 2. Merge the PR to main
+ * 3. Then run: npm run release (creates and pushes tag)
  */
 
 const { execSync } = require('child_process');
@@ -208,24 +214,15 @@ function showExistingTags() {
     }
 }
 
-// Suggest next version based on existing tags
-function suggestNextVersion() {
+// Suggest next version based on existing tags (for reference only)
+function showVersionInfo() {
     try {
         const tags = execCommand('git tag -l "tags/v*" --sort=-version:refname', { silent: true });
         if (tags) {
             const latestTag = tags.split('\n')[0];
             if (latestTag) {
                 const version = latestTag.replace('tags/v', '');
-                const parts = version.split('.').map(Number);
-                if (parts.length === 3 && parts.every(n => !isNaN(n))) {
-                    const nextPatch = `v${parts[0]}.${parts[1]}.${parts[2] + 1}`;
-                    const nextMinor = `v${parts[0]}.${parts[1] + 1}.0`;
-                    const nextMajor = `v${parts[0] + 1}.0.0`;
-                    info(`Suggested versions based on latest (${latestTag}):`);
-                    log(`  Patch: ${nextPatch}`, colors.cyan);
-                    log(`  Minor: ${nextMinor}`, colors.cyan);
-                    log(`  Major: ${nextMajor}`, colors.cyan);
-                }
+                info(`Latest release: ${latestTag} (${version})`);
             }
         }
     } catch (err) {
@@ -266,8 +263,8 @@ async function createRelease() {
         // Show existing tags for reference
         showExistingTags();
         
-        // Suggest next versions
-        suggestNextVersion();
+        // Show version info
+        showVersionInfo();
         
         // Pre-flight checks
         if (!checkMainBranch()) {

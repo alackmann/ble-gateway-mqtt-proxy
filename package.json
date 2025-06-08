@@ -14,6 +14,7 @@
     "test:debug": "LOG_LEVEL=debug mocha test/**/*.test.js",
     "lint": "echo 'Linting not yet configured'",
     "prebuild": "npm test",
+    "prepare-release": "node scripts/prepare-release.js",
     "release": "node scripts/release.js"
   },
   "keywords": [
