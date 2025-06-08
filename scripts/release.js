@@ -333,7 +333,7 @@ async function createRelease() {
         log('3. A GitHub release will be created automatically');
         log('4. Security scans will be performed on the images');
         log('\n🔗 Monitor the progress at:');
-        log('   https://github.com/your-username/ble-gateway-mqtt-proxy/actions', colors.blue);
+        log('   https://github.com/alackmann/ble-gateway-mqtt-proxy/actions', colors.blue);
         
     } catch (err) {
         error('\nRelease process failed');
