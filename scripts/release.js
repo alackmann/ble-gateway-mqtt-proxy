@@ -60,11 +60,13 @@ function question(prompt) {
 // Execute shell command and return output
 function execCommand(command, options = {}) {
     try {
-        return execSync(command, { 
+        const result = execSync(command, { 
             encoding: 'utf8', 
             stdio: options.silent ? 'pipe' : 'inherit',
             ...options 
-        }).trim();
+        });
+        // Handle null/undefined results safely
+        return result ? result.toString().trim() : '';
     } catch (err) {
         if (!options.silent) {
             error(`Command failed: ${command}`);
