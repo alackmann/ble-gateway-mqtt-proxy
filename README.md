@@ -111,17 +111,24 @@ npm run dev
 
 **Create a new release:**
 ```bash
+# Step 1: Prepare release (creates version bump PR)
+npm run prepare-release
+
+# Step 2: After merging PR, create release tag
 npm run release
 ```
 
-The release script will guide you through creating a new tagged release. It:
-- Validates you're on the main branch with a clean working directory
-- Prompts for a semantic version (e.g., v1.2.3)
-- Creates and pushes the tag to trigger automated CI/CD
-- Builds and publishes Docker images
-- Creates a GitHub release
+The release workflow uses a two-step process to eliminate race conditions:
+1. `prepare-release` creates a version bump PR for review
+2. `release` tags the merged version and triggers automated CI/CD
 
-See [`docs/CICD_RELEASE_PROCESS.md`](docs/CICD_RELEASE_PROCESS.md) for detailed CI/CD information.
+This ensures clean version management and enables team collaboration on releases. The workflow:
+- Validates branch state and runs tests
+- Creates semantic versioned tags (patch/minor/major)
+- Triggers automated Docker building and publishing
+- Creates GitHub releases with proper versioning
+
+See [`docs/RELEASE_WORKFLOW.md`](docs/RELEASE_WORKFLOW.md) for detailed workflow documentation and [`docs/CICD_RELEASE_PROCESS.md`](docs/CICD_RELEASE_PROCESS.md) for CI/CD information.
 
 ## Status
 
