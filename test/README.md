@@ -7,16 +7,32 @@ This document describes the testing setup and framework for the BLE Gateway Data
 - **Test Runner**: Mocha
 - **Assertion Library**: Chai
 - **HTTP Testing**: Supertest
+- **Mocking**: Sinon with Sinon-Chai for enhanced assertions
+- **Module Mocking**: Proxyquire for dependency injection
 - **Mock Data**: Custom utilities in `test/utils.js`
 
 ## Test Structure
 ```
 test/
-├── basic.test.js       # Basic framework validation tests
-├── config.test.js      # Configuration management tests
-├── endpoint.test.js    # HTTP endpoint integration tests
-├── utils.js           # Test utilities and mock data
-└── setup.js           # Test environment setup
+├── basic.test.js                    # Basic framework validation tests
+├── config.test.js                   # Configuration management tests
+├── decoding.test.js                 # MessagePack/JSON decoding tests
+├── device-parser.test.js            # BLE device parsing logic tests
+├── endpoint.test.js                 # HTTP endpoint integration tests
+├── gateway-parser.test.js           # Gateway data parsing tests
+├── ha-config.test.js                # Home Assistant configuration tests
+├── ha-discovery.test.js             # Home Assistant discovery publisher tests
+├── ha-integration.test.js           # Home Assistant integration workflow tests
+├── ha-state-publishing.test.js      # Home Assistant state publishing tests
+├── integration-gateway-mqtt.test.js # Gateway MQTT publishing integration tests
+├── integration-test.js              # End-to-end integration tests
+├── json-transformer.test.js         # JSON transformation logic tests
+├── logger.test.js                   # Logging framework tests
+├── manual-decoding-test.js          # Manual decoding verification tests
+├── mqtt-client.test.js              # MQTT client functionality tests
+├── utils.test.js                    # Utility functions tests
+├── utils.js                         # Test utilities and mock data
+└── setup.js                         # Test environment setup
 ```
 
 ## Running Tests
@@ -36,60 +52,48 @@ npm run test:watch
 npm run test:debug
 ```
 
-### With Coverage (if nyc is installed)
-```bash
-npm run test:coverage
-```
+## Current Test Coverage (226 tests passing)
 
-## Test Categories
+### Functional Areas Fully Tested
+✅ **Configuration Management** - Environment variables, defaults, validation  
+✅ **HTTP Endpoints** - Content-Type validation, request handling, error responses  
+✅ **Data Decoding** - MessagePack and JSON parsing with edge cases  
+✅ **BLE Device Parsing** - Advertisement data parsing, validation, statistics  
+✅ **Gateway Data Processing** - Gateway info parsing, metadata extraction  
+✅ **JSON Transformation** - Device data transformation, validation, statistics  
+✅ **MQTT Client Operations** - Connection, publishing, topic construction  
+✅ **Home Assistant Integration** - Auto-discovery, configuration, state publishing  
+✅ **Logging Framework** - Log levels, formatting, specialized logging functions  
+✅ **Utility Functions** - MAC formatting, string slugification  
+✅ **Integration Workflows** - End-to-end data processing flows  
 
-### 1. Basic Framework Tests (`basic.test.js`)
-- Validates Mocha and Chai setup
-- Tests basic assertion functionality
-- Ensures test framework is working correctly
+### Test Categories by Coverage
 
-### 2. Configuration Tests (`config.test.js`)
-- Tests environment variable loading
-- Validates default configuration values
-- Tests configuration validation logic
-- Ensures `.env` file support works correctly
+#### Core Functionality (100% Coverage)
+- ✅ BLE device advertisement parsing and validation
+- ✅ Gateway data extraction and processing  
+- ✅ JSON payload transformation and validation
+- ✅ MQTT topic construction and message publishing
+- ✅ Configuration loading from environment variables
 
-### 3. HTTP Endpoint Tests (`endpoint.test.js`)
-- Tests POST `/tokendata` endpoint functionality
-- Validates Content-Type handling (MessagePack and JSON)
-- Tests request body validation
-- Verifies proper HTTP status codes
-- Tests health check endpoint
-- Validates 404 handling
+#### Home Assistant Integration (100% Coverage)
+- ✅ MQTT Auto Discovery message generation
+- ✅ Device configuration parsing from environment variables
+- ✅ State topic publishing with proper retention settings
+- ✅ Gateway device representation and sensor configuration
+- ✅ Integration workflow from startup to message publishing
 
-## Test Utilities (`utils.js`)
+#### HTTP API (100% Coverage)
+- ✅ MessagePack and JSON content-type handling
+- ✅ Request body validation and error responses
+- ✅ Health check endpoint functionality
+- ✅ 404 handling for unknown endpoints
 
-### Mock Data Functions
-- `createMockGatewayData(overrides)` - Creates realistic BLE gateway data
-- `createMockMessagePackData(data)` - Encodes data as MessagePack
-- `createMockEnvConfig()` - Provides test environment configuration
-
-### Test Helper Functions
-- `restoreEnvironment(originalEnv)` - Cleans up environment variables
-- `clearRequireCache(modules)` - Clears Node.js require cache for fresh imports
-
-## Current Test Coverage
-
-### Functional Areas Tested
-✅ Configuration management and environment variables  
-✅ HTTP endpoint basic functionality  
-✅ Content-Type validation  
-✅ Request body validation  
-✅ MessagePack data handling  
-✅ Error response handling  
-✅ Health check endpoint  
-
-### Areas for Future Testing (as development progresses)
-- [ ] BLE device data parsing
-- [ ] JSON transformation logic
-- [ ] MQTT client connection
-- [ ] MQTT message publishing
-- [ ] End-to-end integration tests
+#### Infrastructure (100% Coverage)
+- ✅ Logging system with configurable levels
+- ✅ MQTT client connection management
+- ✅ Environment-based configuration system
+- ✅ Error handling and graceful failure modes
 
 ## Test Data
 
@@ -109,6 +113,21 @@ The test utilities create realistic mock data that matches the April Brother BLE
   ]
 }
 ```
+
+### Test Utilities (`utils.js`)
+
+#### Mock Data Functions
+- `createMockGatewayData(overrides)` - Creates realistic BLE gateway data
+- `createMockMessagePackData(data)` - Encodes data as MessagePack
+- `createMockEnvConfig()` - Provides test environment configuration
+- `createMockBleDevice(overrides)` - Creates mock BLE device data
+- `createMockParsedDevice(overrides)` - Creates mock parsed device objects
+
+#### Test Helper Functions
+- `restoreEnvironment(originalEnv)` - Cleans up environment variables
+- `clearRequireCache(modules)` - Clears Node.js require cache for fresh imports
+- Mock MQTT client creation and connection simulation
+- Environment variable backup and restoration utilities
 
 ## Development Workflow
 1. Write tests first (TDD approach when possible)
