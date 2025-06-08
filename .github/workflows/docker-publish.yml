@@ -5,8 +5,6 @@ on:
     branches:
       - main
       - develop
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - main
@@ -64,13 +62,26 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
+        labels: |
+          org.opencontainers.image.title=BLE Gateway MQTT Proxy
+          org.opencontainers.image.description=MQTT proxy for April Brother BLE Gateway v4 with Home Assistant integration
+          org.opencontainers.image.source={{url}}
+          org.opencontainers.image.revision={{sha}}
+          org.opencontainers.image.created={{date 'iso8601'}}
+          org.opencontainers.image.licenses=MIT
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+
+    - name: Show Docker tags that will be created
+      run: |
+        echo "🏷️ Docker tags that will be created:"
+        echo "${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "📋 Docker labels that will be applied:"
+        echo "${{ steps.meta.outputs.labels }}"
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
