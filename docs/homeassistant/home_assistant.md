@@ -173,7 +173,58 @@ These messages provide the real-time sensor data.
 
 **Note:** This change means that all BLE devices will use the new `/state/` topic format, ensuring consistency and Home Assistant compatibility. Only devices explicitly configured via `HA_BLE_DEVICE_X` environment variables will have discovery config messages published when `HA_ENABLED` is true.
 
-## 6. Development Task List
+## 6. Gateway Discovery Integration
+
+### 6.1 Overview
+
+The BLE Gateway itself is automatically represented as a device in Home Assistant with multiple sensors when Home Assistant integration is enabled (`HA_ENABLED=true`). This provides comprehensive monitoring of the gateway's status and health.
+
+### 6.2 Gateway Device Sensors
+
+The gateway appears in Home Assistant with the following sensors:
+
+- **Version**: The firmware version of the gateway
+- **IP Address**: The current IP address of the gateway  
+- **MAC Address**: The hardware MAC address of the gateway
+- **Message ID**: The message ID from the gateway
+- **Gateway Time**: The internal time of the gateway
+- **Last Ping**: The timestamp when the gateway last sent data
+
+### 6.3 MQTT Topic Structure
+
+Gateway status data is published to a dedicated state topic that follows the same pattern as BLE devices:
+
+- **Gateway State Topic**: `blegateway/gateway/state`
+- **Discovery Topics**: `homeassistant/sensor/gateway_<sensor_type>/config`
+
+This aligns with the structure used for BLE devices and follows Home Assistant best practices.
+
+### 6.4 Configuration
+
+Gateway discovery is automatically included when Home Assistant integration is enabled. You can customize the gateway's display name:
+
+- **`HA_GATEWAY_NAME`**: (String, default `April Brother BLE Gateway`) The friendly name for the gateway device in Home Assistant
+
+Example configuration:
+```bash
+HA_ENABLED=true
+HA_GATEWAY_NAME=My BLE Gateway
+```
+
+### 6.5 Publishing Behavior
+
+1. **Discovery Messages**: Published automatically when the application starts with `HA_ENABLED=true`
+2. **State Updates**: Published whenever the gateway sends status data
+3. **Retention**: Gateway state messages use `retain: false`, discovery messages use `retain: true`
+
+### 6.6 Benefits
+
+- **Unified Dashboard**: View all gateway and BLE device information together
+- **Automatic Updates**: Sensor values update in real-time
+- **Health Monitoring**: Monitor gateway connectivity and status
+- **Consistent Structure**: Uses the same MQTT patterns as BLE devices
+
+## 7. Development Task List
 
 This task list outlines the steps to implement Home Assistant MQTT Auto Discovery, building upon the existing application and test framework.
 
