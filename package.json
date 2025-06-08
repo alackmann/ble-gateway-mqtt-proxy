@@ -13,7 +13,8 @@
     "test:watch": "mocha test/**/*.test.js --watch",
     "test:debug": "LOG_LEVEL=debug mocha test/**/*.test.js",
     "lint": "echo 'Linting not yet configured'",
-    "prebuild": "npm test"
+    "prebuild": "npm test",
+    "release": "node scripts/release.js"
   },
   "keywords": [
     "ble",
