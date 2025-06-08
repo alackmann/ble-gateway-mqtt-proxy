@@ -12,6 +12,8 @@
 
 const { execSync } = require('child_process');
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
 
 // ANSI color codes for terminal output
 const colors = {
@@ -73,6 +75,27 @@ function execCommand(command, options = {}) {
             error(err.message);
         }
         throw err;
+    }
+}
+
+// Get version from package.json
+function getPackageVersion() {
+    try {
+        const packageJsonPath = path.join(__dirname, '..', 'package.json');
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        const version = packageJson.version;
+        
+        if (!version) {
+            error('No version found in package.json');
+            return null;
+        }
+        
+        // Ensure version starts with 'v'
+        return version.startsWith('v') ? version : `v${version}`;
+    } catch (err) {
+        error('Failed to read package.json');
+        error(err.message);
+        return null;
     }
 }
 
@@ -264,36 +287,32 @@ async function createRelease() {
             process.exit(1);
         }
         
-        // Get version from user
-        let version;
-        while (true) {
-            const input = await question('\n📝 Enter the version to tag (format: v1.2.3): ');
-            
-            if (!input.trim()) {
-                warning('Please enter a version');
-                continue;
-            }
-            
-            version = input.trim();
-            
-            if (!isValidSemver(version)) {
-                error('Invalid version format. Please use semantic versioning (e.g., v1.2.3)');
-                continue;
-            }
-            
-            // Check if tag already exists
-            const tag = `tags/${version}`;
-            if (checkTagExists(tag)) {
-                error(`Tag ${tag} already exists`);
-                continue;
-            }
-            
-            break;
+        // Get version from package.json
+        const version = getPackageVersion();
+        if (!version) {
+            error('Unable to determine version from package.json');
+            process.exit(1);
         }
         
-        // Confirm the release
+        info(`Using version from package.json: ${version}`);
+        
+        if (!isValidSemver(version)) {
+            error(`Invalid version format in package.json: ${version}`);
+            error('Please use semantic versioning (e.g., 1.2.3) in package.json');
+            process.exit(1);
+        }
+        
+        // Check if tag already exists
+        const tag = `tags/${version}`;
+        if (checkTagExists(tag)) {
+            error(`Tag ${tag} already exists`);
+            error('Please update the version in package.json to a new version');
+            process.exit(1);
+        }
+        
+        // Show release summary
         log(`\n📋 Release Summary:`, colors.bold);
-        log(`   Version: ${version}`, colors.cyan);
+        log(`   Version: ${version} (from package.json)`, colors.cyan);
         log(`   Tag: tags/${version}`, colors.cyan);
         log(`   Branch: main`, colors.cyan);
         

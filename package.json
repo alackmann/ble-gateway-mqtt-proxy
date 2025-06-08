@@ -1,6 +1,6 @@
 {
   "name": "ble-gateway-mqtt-proxy",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "BLE Gateway Data Processor - Receives data from April Brother BLE Gateway V4 and publishes to MQTT",
   "main": "src/index.js",
   "directories": {
