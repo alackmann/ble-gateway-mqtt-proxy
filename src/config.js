@@ -11,6 +11,29 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 /**
+ * Safely parses the MQTT_PUBLISH_INTERVAL_SECONDS environment variable.
+ * @returns {number} The parsed interval in seconds, or 0 if invalid or not set.
+ */
+function parsePublishInterval() {
+    const envVar = process.env.MQTT_PUBLISH_INTERVAL_SECONDS;
+
+    // If the variable is not set, is an empty string, or is null, default to 0.
+    if (envVar === undefined || envVar === null || envVar.trim() === '') {
+        return 0;
+    }
+
+    const parsedValue = parseInt(envVar, 10);
+
+    // If parsing results in NaN (e.g., for non-numeric strings), default to 0.
+    // Also treat negative numbers as 0.
+    if (isNaN(parsedValue) || parsedValue < 0) {
+        return 0;
+    }
+
+    return parsedValue;
+}
+
+/**
  * Configuration object with all required parameters
  */
 const config = {
@@ -28,7 +51,7 @@ const config = {
         topicPrefix: process.env.MQTT_TOPIC_PREFIX || '/blegateways/aprilbrother/',
         qos: parseInt(process.env.MQTT_QOS) || 1,
         retain: process.env.MQTT_RETAIN === 'true' || false,
-        publishIntervalSeconds: parseInt(process.env.MQTT_PUBLISH_INTERVAL_SECONDS, 10) || 0,
+        publishIntervalSeconds: parsePublishInterval(),
     },
 
     // Logging Configuration

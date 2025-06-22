@@ -28,10 +28,10 @@ This ensures that the system is highly responsive to new devices while avoiding 
 - **FR-007.2:** This variable defines the time in seconds for the scheduled publishing interval.
 - **FR-007.3:** If this variable is not set or is set to `0`, the application MUST maintain its original behavior of publishing all data as it is received.
 
-### FR-008: Event-Driven Publishing for New Devices
+### FR-008: Event-Driven Publishing for New Tracked Devices
 
 - **FR-008.1:** The application MUST keep track of the unique BLE device MAC addresses it has seen and published within the current publishing interval.
-- **FR-008.2:** When new data is received from the gateway, if it contains a BLE device with a MAC address that has *not* been seen in the current interval, the application MUST immediately publish the data for all devices in the current payload.
+- **FR-008.2:** When new data is received from the gateway, if it contains a **tracked Home Assistant device** (as defined by `HA_BLE_DEVICE_...` variables) with a MAC address that has *not* been seen in the current interval, the application MUST immediately publish the data for all devices in the current payload. If no devices are tracked, this condition is never met.
 - **FR-008.3:** An immediate publication (as per FR-008.2) MUST reset the publishing interval timer. The set of "seen" MAC addresses for the interval is cleared after publishing.
 
 ### FR-009: Scheduled Publishing
@@ -58,8 +58,8 @@ The implementation will involve the following components:
   - The core request handling logic will be modified:
     1. On receiving data, store it in `lastReceivedData`.
     2. Extract all MAC addresses from the payload.
-    3. Check if any of these MACs are new compared to `seenMacsSinceLastPublish`.
-    4. **If a new MAC is found:**
+    3. Identify any **tracked Home Assistant devices** in the payload that have not been seen since the last publication.
+    4. **If a new tracked device is found:**
         - Publish the `lastReceivedData` immediately.
         - Clear `publishTimeout`.
         - Reset the timer by calling a `scheduleNextPublish()` function.

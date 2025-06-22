@@ -339,10 +339,23 @@ app.post('/tokendata', async (req, res) => {
                         transformedPayloads.map(p => p.mac_address.toLowerCase())
                     );
 
-                    const newMacs = [...currentMacs].filter(mac => !seenMacsSinceLastPublish.has(mac));
+                    // Get the set of tracked devices from config
+                    const trackedDeviceMacs = new Set(config.homeAssistant.devices.keys());
 
-                    if (newMacs.length > 0) {
-                        logger.info('New BLE devices detected, triggering immediate publication.', { newMacs });
+                    // Determine if there's a new *tracked* device in the current payload
+                    let newTrackedDeviceFound = false;
+                    const newTrackedDevices = [];
+                    if (trackedDeviceMacs.size > 0) {
+                        for (const mac of currentMacs) {
+                            if (trackedDeviceMacs.has(mac) && !seenMacsSinceLastPublish.has(mac)) {
+                                newTrackedDeviceFound = true;
+                                newTrackedDevices.push(mac);
+                            }
+                        }
+                    }
+
+                    if (newTrackedDeviceFound) {
+                        logger.info('New tracked BLE devices detected, triggering immediate publication.', { newMacs: newTrackedDevices });
                         
                         // Publish immediately and reset the interval timer.
                         await publishDeviceData(lastReceivedData, gatewayMetadata);
@@ -356,7 +369,7 @@ app.post('/tokendata', async (req, res) => {
                         scheduleNextPublish();
 
                     } else {
-                        logger.debug('No new devices detected. Caching data and waiting for next scheduled publish.');
+                        logger.debug('No new tracked devices detected. Caching data and waiting for next scheduled publish.');
                         // Add any MACs from this payload to the set for the current interval.
                         currentMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
                     }
@@ -571,6 +584,7 @@ process.on('SIGTERM', async () => {
 
 // Export for testing
 module.exports = { 
+    app,
     initializeApplication,
     shutdown
 };
