@@ -28,6 +28,7 @@ const config = {
         topicPrefix: process.env.MQTT_TOPIC_PREFIX || '/blegateways/aprilbrother/',
         qos: parseInt(process.env.MQTT_QOS) || 1,
         retain: process.env.MQTT_RETAIN === 'true' || false,
+        publishIntervalSeconds: parseInt(process.env.MQTT_PUBLISH_INTERVAL_SECONDS, 10) || 0,
     },
 
     // Logging Configuration

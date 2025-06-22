@@ -49,6 +49,7 @@ docker run -d \
 - `MQTT_TOPIC_PREFIX`: Topic prefix for published messages (default: `blegateway`)
 - `SERVER_PORT`: HTTP server port (default: 8000)
 - `LOG_LEVEL`: Logging level (debug, info, warn, error)
+- `MQTT_PUBLISH_INTERVAL_SECONDS`: (Optional) Sets a scheduled interval in seconds for publishing MQTT data. If set to `0` (the default), data is published immediately upon receipt. If set to a value greater than zero (e.g., `10`), the system will only publish at this interval, unless a new, previously unseen BLE device is detected, which will trigger an immediate publication. This helps reduce MQTT traffic while maintaining responsiveness to new devices.
 
 ### Home Assistant Integration
 
