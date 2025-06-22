@@ -44,7 +44,11 @@ This ensures that the system is highly responsive to new devices while avoiding 
 
 ### 3.1. Home Assistant Discovery Messages
 
-The `MQTT_PUBLISH_INTERVAL_SECONDS` setting **only** affects the publication of BLE device state updates (e.g., RSSI, timestamp). It does **not** affect the publication of Home Assistant discovery `config` messages. The discovery messages will continue to be published at their own fixed interval (typically 60 seconds) to ensure Home Assistant entities are created and updated correctly.
+The `MQTT_PUBLISH_INTERVAL_SECONDS` setting **only** affects the publication of BLE device state updates (e.g., RSSI, timestamp) and gateway status messages. It does **not** affect the publication of Home Assistant discovery `config` messages. The discovery messages will continue to be published at their own fixed interval (typically 60 seconds) to ensure Home Assistant entities are created and updated correctly.
+
+### 3.2. Gateway Status Messages
+
+Gateway status messages are published alongside device data, following the same throttling logic. When an immediate publication is triggered by a new tracked device, both device data and gateway status are published together. Similarly, during scheduled publications, both types of data are published simultaneously.
 
 ## 4. Technical Design
 

@@ -20,16 +20,22 @@ let lastReceivedData = null;
 let seenMacsSinceLastPublish = new Set();
 let publishTimeout = null;
 let lastGatewayMetadata = null; // To pass to scheduled publish
+let lastGatewayInfo = null; // To cache gateway info for scheduled publish
 
 /**
- * Publishes device data payloads to MQTT.
+ * Publishes device data payloads and gateway status to MQTT.
  * This function encapsulates the MQTT publishing logic and logging.
  * @param {Array<Object>} payloads The JSON payloads to publish.
  * @param {Object} gatewayMetadata Metadata about the gateway for logging.
+ * @param {Object} gatewayInfo Gateway information to publish.
  */
-async function publishDeviceData(payloads, gatewayMetadata) {
+async function publishDeviceData(payloads, gatewayMetadata, gatewayInfo = null) {
     if (!payloads || payloads.length === 0) {
         logger.info('No device data to publish.');
+        // Still publish gateway data if available
+        if (gatewayInfo) {
+            await publishGatewayStatus(gatewayInfo);
+        }
         return;
     }
     try {
@@ -61,10 +67,41 @@ async function publishDeviceData(payloads, gatewayMetadata) {
         } else if (mqttResults.successCount > 0) {
             logger.info(`Successfully published data for ${mqttResults.successCount} devices.`);
         }
+
+        // Publish gateway status alongside device data
+        if (gatewayInfo) {
+            await publishGatewayStatus(gatewayInfo);
+        }
     } catch (mqttError) {
         logger.error('MQTT publishing failed with exception', {
             error: mqttError.message,
             payloadCount: payloads.length
+        });
+    }
+}
+
+/**
+ * Publishes gateway status information to MQTT.
+ * @param {Object} gatewayInfo Gateway information to publish.
+ */
+async function publishGatewayStatus(gatewayInfo) {
+    try {
+        logger.debug('Publishing gateway status to MQTT broker', {
+            gatewayInfo: {
+                version: gatewayInfo.version,
+                messageId: gatewayInfo.messageId,
+                ip: gatewayInfo.ip,
+                mac: gatewayInfo.mac
+            }
+        });
+        
+        await mqttClient.publishGatewayData(gatewayInfo);
+        logger.debug('Gateway status published to MQTT successfully');
+        
+    } catch (gatewayMqttError) {
+        logger.error('Gateway MQTT publishing failed', {
+            error: gatewayMqttError.message,
+            gatewayMac: gatewayInfo.mac
         });
     }
 }
@@ -91,16 +128,22 @@ function scheduleNextPublish() {
         seenMacsSinceLastPublish.clear();
 
         if (lastReceivedData) {
-            // Publish the last data we received
-            await publishDeviceData(lastReceivedData, lastGatewayMetadata);
+            // Publish the last data we received along with gateway status
+            await publishDeviceData(lastReceivedData, lastGatewayMetadata, lastGatewayInfo);
 
             // After publishing, the "seen" set for the new interval should contain these MACs
             const publishedMacs = new Set(lastReceivedData.map(p => p.mac_address.toLowerCase()));
             publishedMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
             
             lastReceivedData = null; // Clear the cache
+            lastGatewayInfo = null; // Clear gateway cache
         } else {
             logger.info('Scheduled publish: No data received in the last interval to publish.');
+            // Still publish gateway status if available
+            if (lastGatewayInfo) {
+                await publishGatewayStatus(lastGatewayInfo);
+                lastGatewayInfo = null;
+            }
         }
 
         // Schedule the next run
@@ -326,11 +369,12 @@ app.post('/tokendata', async (req, res) => {
             if (transformedPayloads.length > 0) {
                 const gatewayMetadata = gatewayParser.getGatewayMetadata(parsedData.gatewayInfo);
                 lastGatewayMetadata = gatewayMetadata; // Cache for scheduled publishes
+                lastGatewayInfo = parsedData.gatewayInfo; // Cache gateway info for publishing
 
                 // If interval publishing is disabled (set to 0), publish immediately.
                 if (config.mqtt.publishIntervalSeconds === 0) {
                     logger.debug('Publish interval is disabled. Publishing immediately.');
-                    await publishDeviceData(transformedPayloads, gatewayMetadata);
+                    await publishDeviceData(transformedPayloads, gatewayMetadata, parsedData.gatewayInfo);
                 } else {
                     // Interval publishing is enabled.
                     lastReceivedData = transformedPayloads; // Always cache the latest data.
@@ -358,8 +402,9 @@ app.post('/tokendata', async (req, res) => {
                         logger.info('New tracked BLE devices detected, triggering immediate publication.', { newMacs: newTrackedDevices });
                         
                         // Publish immediately and reset the interval timer.
-                        await publishDeviceData(lastReceivedData, gatewayMetadata);
+                        await publishDeviceData(lastReceivedData, gatewayMetadata, lastGatewayInfo);
                         lastReceivedData = null; // Clear cache after publishing
+                        lastGatewayInfo = null; // Clear gateway cache after publishing
 
                         // A publication event resets the interval.
                         seenMacsSinceLastPublish.clear();
@@ -376,32 +421,23 @@ app.post('/tokendata', async (req, res) => {
                 }
             } else {
                 logger.info('No JSON payloads to publish to MQTT');
+                // Still cache gateway info for potential scheduled publishing
+                if (config.mqtt.publishIntervalSeconds > 0) {
+                    lastGatewayInfo = parsedData.gatewayInfo;
+                } else {
+                    // Publish gateway status immediately if no interval is set
+                    await publishGatewayStatus(parsedData.gatewayInfo);
+                }
             }
         } else {
             logger.info('No devices to transform - skipping JSON transformation');
-        }
-        
-        // Task 12: Publish gateway status information to MQTT
-        try {
-            logger.debug('Publishing gateway status to MQTT broker', {
-                gatewayInfo: {
-                    version: parsedData.gatewayInfo.version,
-                    messageId: parsedData.gatewayInfo.messageId,
-                    ip: parsedData.gatewayInfo.ip,
-                    mac: parsedData.gatewayInfo.mac
-                }
-            });
-            
-            await mqttClient.publishGatewayData(parsedData.gatewayInfo);
-            logger.debug('Gateway status published to MQTT successfully');
-            
-        } catch (gatewayMqttError) {
-            logger.error('Gateway MQTT publishing failed', {
-                error: gatewayMqttError.message,
-                gatewayMac: parsedData.gatewayInfo.mac
-            });
-            // Note: We don't return an error response here as the data was processed successfully
-            // Gateway MQTT publishing failures are logged but don't affect the HTTP response
+            // Still cache gateway info for potential scheduled publishing
+            if (config.mqtt.publishIntervalSeconds > 0) {
+                lastGatewayInfo = parsedData.gatewayInfo;
+            } else {
+                // Publish gateway status immediately if no interval is set
+                await publishGatewayStatus(parsedData.gatewayInfo);
+            }
         }
         
         // Log that we processed the data successfully with consolidated summary
