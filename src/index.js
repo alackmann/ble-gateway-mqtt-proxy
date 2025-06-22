@@ -15,6 +15,102 @@ const haDiscovery = require('./ha-discovery');
 
 const app = express();
 
+// State variables for scheduled/event-driven publishing
+let lastReceivedData = null;
+let seenMacsSinceLastPublish = new Set();
+let publishTimeout = null;
+let lastGatewayMetadata = null; // To pass to scheduled publish
+
+/**
+ * Publishes device data payloads to MQTT.
+ * This function encapsulates the MQTT publishing logic and logging.
+ * @param {Array<Object>} payloads The JSON payloads to publish.
+ * @param {Object} gatewayMetadata Metadata about the gateway for logging.
+ */
+async function publishDeviceData(payloads, gatewayMetadata) {
+    if (!payloads || payloads.length === 0) {
+        logger.info('No device data to publish.');
+        return;
+    }
+    try {
+        logger.debug('Publishing device data to MQTT broker', {
+            payloadCount: payloads.length,
+            firstDeviceMac: payloads[0]?.mac_address,
+            gatewayInfo: gatewayMetadata ? {
+                mac: gatewayMetadata.mac,
+                ip: gatewayMetadata.ip
+            } : undefined
+        });
+
+        const mqttResults = await mqttClient.publishMultipleDeviceData(payloads);
+
+        if (mqttResults.errorCount > 0) {
+            logger.warn('Some MQTT publications failed', {
+                totalPayloads: mqttResults.totalCount,
+                successfulPublications: mqttResults.successCount,
+                failedPublications: mqttResults.errorCount,
+                errors: mqttResults.errors
+            });
+        }
+
+        if (mqttResults.successCount === 0 && mqttResults.totalCount > 0) {
+            logger.error('All MQTT publications failed', {
+                totalPayloads: mqttResults.totalCount,
+                errors: mqttResults.errors
+            });
+        } else if (mqttResults.successCount > 0) {
+            logger.info(`Successfully published data for ${mqttResults.successCount} devices.`);
+        }
+    } catch (mqttError) {
+        logger.error('MQTT publishing failed with exception', {
+            error: mqttError.message,
+            payloadCount: payloads.length
+        });
+    }
+}
+
+/**
+ * Sets a timer for the next scheduled publication.
+ * The callback will publish the last received data and then reschedule itself.
+ */
+function scheduleNextPublish() {
+    // Clear any existing timer to ensure we don't have multiple running
+    if (publishTimeout) {
+        clearTimeout(publishTimeout);
+    }
+
+    const interval = config.mqtt.publishIntervalSeconds * 1000;
+    if (interval === 0) {
+        return; // Do not schedule if the interval is zero
+    }
+
+    const publishCallback = async () => {
+        logger.info(`Scheduled publish triggered after ${config.mqtt.publishIntervalSeconds} seconds.`);
+        
+        // A new interval starts now. Clear the set of seen MACs for the upcoming interval.
+        seenMacsSinceLastPublish.clear();
+
+        if (lastReceivedData) {
+            // Publish the last data we received
+            await publishDeviceData(lastReceivedData, lastGatewayMetadata);
+
+            // After publishing, the "seen" set for the new interval should contain these MACs
+            const publishedMacs = new Set(lastReceivedData.map(p => p.mac_address.toLowerCase()));
+            publishedMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
+            
+            lastReceivedData = null; // Clear the cache
+        } else {
+            logger.info('Scheduled publish: No data received in the last interval to publish.');
+        }
+
+        // Schedule the next run
+        scheduleNextPublish();
+    };
+
+    publishTimeout = setTimeout(publishCallback, interval);
+    logger.debug(`Next scheduled publish in ${config.mqtt.publishIntervalSeconds} seconds.`);
+}
+
 // Middleware to parse raw request bodies for MessagePack
 // Handle requests with no Content-Type header by using a custom type function
 app.use('/tokendata', express.raw({ 
@@ -225,54 +321,58 @@ app.post('/tokendata', async (req, res) => {
                 logger.debug('JSON payload statistics', jsonStats);
             }
             
-            // Task 11: Implement MQTT publishing
-            if (jsonTransformResult.payloads.length > 0) {
-                try {
-                    logger.debug('Publishing device data to MQTT broker', {
-                        payloadCount: jsonTransformResult.payloads.length,
-                        firstDeviceMac: jsonTransformResult.payloads[0]?.mac_address,
-                        gatewayInfo: {
-                            mac: gatewayMetadata.mac,
-                            ip: gatewayMetadata.ip
+            // Task 11: Implement MQTT publishing with throttling logic
+            const transformedPayloads = jsonTransformResult.payloads;
+            if (transformedPayloads.length > 0) {
+                const gatewayMetadata = gatewayParser.getGatewayMetadata(parsedData.gatewayInfo);
+                lastGatewayMetadata = gatewayMetadata; // Cache for scheduled publishes
+
+                // If interval publishing is disabled (set to 0), publish immediately.
+                if (config.mqtt.publishIntervalSeconds === 0) {
+                    logger.debug('Publish interval is disabled. Publishing immediately.');
+                    await publishDeviceData(transformedPayloads, gatewayMetadata);
+                } else {
+                    // Interval publishing is enabled.
+                    lastReceivedData = transformedPayloads; // Always cache the latest data.
+
+                    const currentMacs = new Set(
+                        transformedPayloads.map(p => p.mac_address.toLowerCase())
+                    );
+
+                    // Get the set of tracked devices from config
+                    const trackedDeviceMacs = new Set(config.homeAssistant.devices.keys());
+
+                    // Determine if there's a new *tracked* device in the current payload
+                    let newTrackedDeviceFound = false;
+                    const newTrackedDevices = [];
+                    if (trackedDeviceMacs.size > 0) {
+                        for (const mac of currentMacs) {
+                            if (trackedDeviceMacs.has(mac) && !seenMacsSinceLastPublish.has(mac)) {
+                                newTrackedDeviceFound = true;
+                                newTrackedDevices.push(mac);
+                            }
                         }
-                    });
-                    
-                    // Publish all JSON payloads to MQTT
-                    const mqttResults = await mqttClient.publishMultipleDeviceData(jsonTransformResult.payloads);
-                    
-                    // Log MQTT publishing results - only errors at INFO level
-                    if (mqttResults.errorCount > 0) {
-                        logger.warn('Some MQTT publications failed', {
-                            totalPayloads: mqttResults.totalCount,
-                            successfulPublications: mqttResults.successCount,
-                            failedPublications: mqttResults.errorCount,
-                            errors: mqttResults.errors
-                        });
                     }
-                    
-                    if (mqttResults.successCount === 0 && mqttResults.totalCount > 0) {
-                        logger.error('All MQTT publications failed', {
-                            totalPayloads: mqttResults.totalCount,
-                            errors: mqttResults.errors
-                        });
-                        // Note: We don't return an error response here as the data was processed successfully
-                        // MQTT publishing failures are logged but don't affect the HTTP response
+
+                    if (newTrackedDeviceFound) {
+                        logger.info('New tracked BLE devices detected, triggering immediate publication.', { newMacs: newTrackedDevices });
+                        
+                        // Publish immediately and reset the interval timer.
+                        await publishDeviceData(lastReceivedData, gatewayMetadata);
+                        lastReceivedData = null; // Clear cache after publishing
+
+                        // A publication event resets the interval.
+                        seenMacsSinceLastPublish.clear();
+                        currentMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
+
+                        // Reset the scheduled publish timer.
+                        scheduleNextPublish();
+
                     } else {
-                        // Success logging moved to debug level
-                        logger.debug('MQTT publishing completed successfully', {
-                            totalPayloads: mqttResults.totalCount,
-                            successfulPublications: mqttResults.successCount,
-                            failedPublications: mqttResults.errorCount
-                        });
+                        logger.debug('No new tracked devices detected. Caching data and waiting for next scheduled publish.');
+                        // Add any MACs from this payload to the set for the current interval.
+                        currentMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
                     }
-                    
-                } catch (mqttError) {
-                    logger.error('MQTT publishing failed with exception', {
-                        error: mqttError.message,
-                        payloadCount: jsonTransformResult.payloads.length
-                    });
-                    // Note: We don't return an error response here as the data was processed successfully
-                    // MQTT publishing failures are logged but don't affect the HTTP response
                 }
             } else {
                 logger.info('No JSON payloads to publish to MQTT');
@@ -402,10 +502,9 @@ async function initializeApplication() {
             // This ensures any newly configured devices get discovery messages
             discoveryTimer = setInterval(async () => {
                 try {
+                    logger.info('Publishing periodic Home Assistant discovery messages...');
                     const publishedCount = await haDiscovery.publishDiscoveryMessages(mqttClient);
-                    if (publishedCount > 0) {
-                        logger.info(`Published Home Assistant discovery messages for ${publishedCount} new devices`);
-                    }
+                    logger.info(`Published Home Assistant discovery messages for ${publishedCount} devices`);
                 } catch (haError) {
                     logger.error('Failed to publish periodic Home Assistant discovery messages', {
                         error: haError.message
@@ -414,6 +513,12 @@ async function initializeApplication() {
             }, 60000); // 60 seconds
         } else {
             logger.info('Home Assistant integration is disabled');
+        }
+
+        // Start scheduled publishing if enabled
+        if (config.mqtt.publishIntervalSeconds > 0) {
+            logger.info(`Initializing scheduled MQTT publishing every ${config.mqtt.publishIntervalSeconds} seconds.`);
+            scheduleNextPublish();
         }
     } catch (error) {
         logger.error('Failed to initialize MQTT client', {
@@ -434,6 +539,13 @@ async function shutdown() {
         clearInterval(discoveryTimer);
         discoveryTimer = null;
         logger.info('Cleared discovery timer');
+    }
+
+    // Clear the scheduled publish timer
+    if (publishTimeout) {
+        clearTimeout(publishTimeout);
+        publishTimeout = null;
+        logger.info('Cleared scheduled publish timer');
     }
     
     // Disconnect MQTT client
@@ -472,6 +584,7 @@ process.on('SIGTERM', async () => {
 
 // Export for testing
 module.exports = { 
+    app,
     initializeApplication,
     shutdown
 };
