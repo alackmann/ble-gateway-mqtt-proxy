@@ -378,8 +378,21 @@ After merging this PR:
 2. Create release: \`npm run release\`
 3. Monitor the [Actions workflow](https://github.com/alackmann/ble-gateway-mqtt-proxy/actions)`;
                 
-                execCommand(`gh pr create --title "${prTitle}" --body "${prBody}"`);
-                success('Pull request created successfully!');
+                // Write PR body to temporary file to avoid shell escaping issues
+                const tempFile = path.join(__dirname, '.pr-body-temp.md');
+                fs.writeFileSync(tempFile, prBody);
+                
+                try {
+                    execCommand(`gh pr create --title "${prTitle}" --body-file "${tempFile}"`);
+                    success('Pull request created successfully!');
+                } finally {
+                    // Clean up temp file
+                    try {
+                        fs.unlinkSync(tempFile);
+                    } catch (cleanupErr) {
+                        // Ignore cleanup errors
+                    }
+                }
             } catch (err) {
                 warning('Failed to create PR automatically. You can create it manually.');
             }
