@@ -284,14 +284,21 @@ describe('ScheduledPublisher', () => {
             expect(state2.hasScheduledPublish).to.equal(true);
         });
 
-        it('should clear seen MACs after scheduled publish', async () => {
+        it('should clear device cache and seen MACs after scheduled publish', async () => {
             // Add devices and mark them as seen (gateway sends uppercase)
             await scheduledPublisher.handleIncomingData(
-                [{ mac_address: 'AA:BB:CC:DD:EE:FF', rssi: -50 }],
+                [
+                    { mac_address: 'AA:BB:CC:DD:EE:FF', rssi: -50 },
+                    { mac_address: 'FF:EE:DD:CC:BB:AA', rssi: -60 }
+                ],
                 { mac: 'gateway123', ip: '192.168.1.1' },
                 { version: '1.0' }
             );
-            expect(scheduledPublisher.getState().seenMacsCount).to.equal(1);
+            
+            // Verify devices are cached before publish
+            const stateBefore = scheduledPublisher.getState();
+            expect(stateBefore.deviceCacheSize).to.equal(2);
+            expect(stateBefore.seenMacsCount).to.equal(2);
 
             scheduledPublisher.initialize();
 
@@ -299,10 +306,17 @@ describe('ScheduledPublisher', () => {
             clock.tick(5000);
             await clock.tickAsync(0);
 
-            // Seen MACs should be updated after publish
-            const state = scheduledPublisher.getState();
-            expect(state.seenMacsCount).to.equal(1); // Should contain the published device
-            expect(state.seenMacs).to.include('aa:bb:cc:dd:ee:ff'); // Should be normalized to lowercase
+            // Device cache and seen MACs should be cleared after publish
+            const stateAfter = scheduledPublisher.getState();
+            expect(stateAfter.deviceCacheSize).to.equal(0); // Cache should be empty
+            expect(stateAfter.seenMacsCount).to.equal(0); // Seen MACs should be empty
+            expect(stateAfter.deviceMacs).to.deep.equal([]); // No devices in cache
+            expect(stateAfter.seenMacs).to.deep.equal([]); // No seen MACs
+            
+            // Verify publish was called with the correct data
+            expect(mockPublishDeviceData.callCount).to.equal(1);
+            const publishedDevices = mockPublishDeviceData.firstCall.args[0];
+            expect(publishedDevices).to.have.length(2);
         });
     });
 

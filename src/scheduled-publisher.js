@@ -143,15 +143,13 @@ class ScheduledPublisher {
             
             await this.publishDeviceDataCallback(allDevicePayloads, this.lastGatewayMetadata, this.lastGatewayInfo);
 
+            // Clear the device cache after successful publish to prevent unlimited growth
+            this.deviceCache.clear();
+            
             // Clear the set of seen MACs for the new interval (AFTER successful publish)
             this.seenMacsSinceLastPublish.clear();
             
-            // Update seen MACs for the new interval
-            this.deviceCache.forEach((_, mac) => {
-                this.seenMacsSinceLastPublish.add(mac);
-            });
-            
-            logger.info(`Scheduled publish completed for ${allDevicePayloads.length} devices.`);
+            logger.info(`Scheduled publish completed for ${allDevicePayloads.length} devices. Cache cleared.`);
         } else {
             logger.info('Scheduled publish: No device data in cache to publish.');
             // Still publish gateway status if available
