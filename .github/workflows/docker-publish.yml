@@ -3,8 +3,9 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main
       - develop
+    tags:
+      - 'tags/v*'
   pull_request:
     branches:
       - main
@@ -60,10 +61,11 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
+          type=ref,event=branch,pattern={{branch}}
+          type=ref,event=tag,pattern=tags/v{{version}}
+          type=ref,event=tag,pattern=tags/{{version}}
           type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value=beta,enable={{branch `develop`}}
         labels: |
           org.opencontainers.image.title=BLE Gateway MQTT Proxy
           org.opencontainers.image.description=MQTT proxy for April Brother BLE Gateway v4 with Home Assistant integration
