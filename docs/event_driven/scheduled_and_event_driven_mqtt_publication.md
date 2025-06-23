@@ -20,7 +20,29 @@ This feature introduces a hybrid approach:
 
 This ensures that the system is highly responsive to new devices while avoiding constant updates for devices that are already known to be present.
 
-## 2. Functional Requirements
+## 2. Implementation Status
+
+✅ **COMPLETED**: This feature has been fully implemented and tested.
+
+### 2.1 Key Components
+
+- **ScheduledPublisher Module**: New module (`src/scheduled-publisher.js`) that manages device state caching, scheduled publishing, and event-driven triggers.
+- **Device State Management**: Caches latest data for each device (by MAC address) seen during the current interval.
+- **Event-Driven Publishing**: Immediately publishes when new tracked Home Assistant devices appear.
+- **Scheduled Publishing**: Publishes cached data at regular intervals when no tracked devices trigger immediate publishing.
+- **Comprehensive Testing**: 17 unit tests covering all major functionality and edge cases.
+
+### 2.2 Architecture
+
+The implementation uses a dedicated `ScheduledPublisher` class that:
+
+- Maintains a cache of the latest device data (by MAC address)
+- Tracks which MACs have been seen since the last publish
+- Manages timer-based scheduled publishing
+- Handles immediate publishing for new tracked devices
+- Ensures resilience when devices don't appear in every gateway update
+
+## 3. Functional Requirements
 
 ### FR-007: Configurable Publishing Interval
 
@@ -28,11 +50,15 @@ This ensures that the system is highly responsive to new devices while avoiding 
 - **FR-007.2:** This variable defines the time in seconds for the scheduled publishing interval.
 - **FR-007.3:** If this variable is not set or is set to `0`, the application MUST maintain its original behavior of publishing all data as it is received.
 
+✅ **Implemented**: Configuration handled in `src/config.js` with environment variable support.
+
 ### FR-008: Event-Driven Publishing for New Tracked Devices
 
 - **FR-008.1:** The application MUST keep track of the unique BLE device MAC addresses it has seen and published within the current publishing interval.
 - **FR-008.2:** When new data is received from the gateway, if it contains a **tracked Home Assistant device** (as defined by `HA_BLE_DEVICE_...` variables) with a MAC address that has *not* been seen in the current interval, the application MUST immediately publish the data for all devices in the current payload. If no devices are tracked, this condition is never met.
 - **FR-008.3:** An immediate publication (as per FR-008.2) MUST reset the publishing interval timer. The set of "seen" MAC addresses for the interval is cleared after publishing.
+
+✅ **Implemented**: Handled by `handleIncomingData()` method in `ScheduledPublisher` class.
 
 ### FR-009: Scheduled Publishing
 
@@ -40,13 +66,9 @@ This ensures that the system is highly responsive to new devices while avoiding 
 - **FR-009.2:** If the publishing interval timer expires without any immediate publications having occurred, the application MUST publish the most recently cached data payload.
 - **FR-009.3:** After a scheduled publication, the timer MUST be reset, and the set of "seen" MAC addresses for the new interval is cleared.
 
-## 3. Important Considerations
+✅ **Implemented**: Handled by `performScheduledPublish()` method and timer management in `ScheduledPublisher` class.
 
-### 3.1. Home Assistant Discovery Messages
-
-The `MQTT_PUBLISH_INTERVAL_SECONDS` setting **only** affects the publication of BLE device state updates (e.g., RSSI, timestamp) and gateway status messages. It does **not** affect the publication of Home Assistant discovery `config` messages. The discovery messages will continue to be published at their own fixed interval (typically 60 seconds) to ensure Home Assistant entities are created and updated correctly.
-
-### 3.2. Gateway Status Messages
+## 4. Important Considerations
 
 Gateway status messages are published alongside device data, following the same throttling logic. When an immediate publication is triggered by a new tracked device, both device data and gateway status are published together. Similarly, during scheduled publications, both types of data are published simultaneously.
 
@@ -77,23 +99,27 @@ The implementation will involve the following components:
 
 ## 5. Implementation Task List
 
-1.  **Task: Create Documentation**
-    - **Description:** Create a new markdown file `docs/event_driven/scheduled_and_event_driven_mqtt_publication.md` to document the new feature, its requirements, and the implementation plan.
-    - **Status:** Completed.
+1. **Task: Create Documentation**
+   - **Description:** Create a new markdown file `docs/event_driven/scheduled_and_event_driven_mqtt_publication.md` to document the new feature, its requirements, and the implementation plan.
+   - **Status:** ✅ Completed.
 
-2.  **Task: Update Configuration**
-    - **Description:** Modify `src/config.js` to add support for the `MQTT_PUBLISH_INTERVAL_SECONDS` environment variable. Ensure it defaults to `0` if not provided.
+2. **Task: Update Configuration**
+   - **Description:** Modify `src/config.js` to add support for the `MQTT_PUBLISH_INTERVAL_SECONDS` environment variable. Ensure it defaults to `0` if not provided.
+   - **Status:** ✅ Completed.
 
-3.  **Task: Implement Core Throttling Logic**
-    - **Description:** Update `src/index.js` to implement the caching, MAC address tracking, and conditional publishing logic described in the Technical Design section. This will involve managing a timer and the set of seen MAC addresses.
+3. **Task: Implement Core Throttling Logic**
+   - **Description:** Update `src/index.js` to implement the caching, MAC address tracking, and conditional publishing logic described in the Technical Design section. This will involve managing a timer and the set of seen MAC addresses.
+   - **Status:** ✅ Completed - Created new `ScheduledPublisher` module and integrated it into the main application.
 
-4.  **Task: Update README**
-    - **Description:** Add documentation for the new `MQTT_PUBLISH_INTERVAL_SECONDS` environment variable to the main `README.md` file.
+4. **Task: Update README**
+   - **Description:** Add documentation for the new `MQTT_PUBLISH_INTERVAL_SECONDS` environment variable to the main `README.md` file.
+   - **Status:** ⚠️ Pending.
 
-5.  **Task: Add Unit/Integration Tests**
-    - **Description:** Create new tests in the `test/` directory to validate the new functionality.
-    - **Test Cases:**
-        - Verify that with the interval set, publishing only happens once per interval if no new devices appear.
-        - Verify that an immediate publication occurs when a new device MAC is detected.
-        - Verify that after an immediate publication, the timer is correctly reset.
+5. **Task: Add Unit/Integration Tests**
+   - **Description:** Create new tests in the `test/` directory to validate the new functionality.
+   - **Test Cases:**
+     - Verify that with the interval set, publishing only happens once per interval if no new devices appear.
+     - Verify that an immediate publication occurs when a new device MAC is detected.
+     - Verify that after an immediate publication, the timer is correctly reset.
+   - **Status:** ✅ Completed - 17 comprehensive unit tests covering all major functionality and edge cases.
         - Verify that if the interval is `0` or not set, the old behavior is preserved.

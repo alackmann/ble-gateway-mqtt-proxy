@@ -12,15 +12,12 @@ const deviceParser = require('./device-parser');
 const jsonTransformer = require('./json-transformer');
 const mqttClient = require('./mqtt-client');
 const haDiscovery = require('./ha-discovery');
+const ScheduledPublisher = require('./scheduled-publisher');
 
 const app = express();
 
-// State variables for scheduled/event-driven publishing
-let lastReceivedData = null;
-let seenMacsSinceLastPublish = new Set();
-let publishTimeout = null;
-let lastGatewayMetadata = null; // To pass to scheduled publish
-let lastGatewayInfo = null; // To cache gateway info for scheduled publish
+// Scheduled publisher instance
+let scheduledPublisher = null;
 
 /**
  * Publishes device data payloads and gateway status to MQTT.
@@ -111,47 +108,11 @@ async function publishGatewayStatus(gatewayInfo) {
  * The callback will publish the last received data and then reschedule itself.
  */
 function scheduleNextPublish() {
-    // Clear any existing timer to ensure we don't have multiple running
-    if (publishTimeout) {
-        clearTimeout(publishTimeout);
+    // This function is now handled by the ScheduledPublisher class
+    // Left here for compatibility, but should not be called directly
+    if (scheduledPublisher) {
+        scheduledPublisher.scheduleNextPublish();
     }
-
-    const interval = config.mqtt.publishIntervalSeconds * 1000;
-    if (interval === 0) {
-        return; // Do not schedule if the interval is zero
-    }
-
-    const publishCallback = async () => {
-        logger.info(`Scheduled publish triggered after ${config.mqtt.publishIntervalSeconds} seconds.`);
-        
-        // A new interval starts now. Clear the set of seen MACs for the upcoming interval.
-        seenMacsSinceLastPublish.clear();
-
-        if (lastReceivedData) {
-            // Publish the last data we received along with gateway status
-            await publishDeviceData(lastReceivedData, lastGatewayMetadata, lastGatewayInfo);
-
-            // After publishing, the "seen" set for the new interval should contain these MACs
-            const publishedMacs = new Set(lastReceivedData.map(p => p.mac_address.toLowerCase()));
-            publishedMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
-            
-            lastReceivedData = null; // Clear the cache
-            lastGatewayInfo = null; // Clear gateway cache
-        } else {
-            logger.info('Scheduled publish: No data received in the last interval to publish.');
-            // Still publish gateway status if available
-            if (lastGatewayInfo) {
-                await publishGatewayStatus(lastGatewayInfo);
-                lastGatewayInfo = null;
-            }
-        }
-
-        // Schedule the next run
-        scheduleNextPublish();
-    };
-
-    publishTimeout = setTimeout(publishCallback, interval);
-    logger.debug(`Next scheduled publish in ${config.mqtt.publishIntervalSeconds} seconds.`);
 }
 
 // Middleware to parse raw request bodies for MessagePack
@@ -368,62 +329,21 @@ app.post('/tokendata', async (req, res) => {
             const transformedPayloads = jsonTransformResult.payloads;
             if (transformedPayloads.length > 0) {
                 const gatewayMetadata = gatewayParser.getGatewayMetadata(parsedData.gatewayInfo);
-                lastGatewayMetadata = gatewayMetadata; // Cache for scheduled publishes
-                lastGatewayInfo = parsedData.gatewayInfo; // Cache gateway info for publishing
 
-                // If interval publishing is disabled (set to 0), publish immediately.
-                if (config.mqtt.publishIntervalSeconds === 0) {
-                    logger.debug('Publish interval is disabled. Publishing immediately.');
-                    await publishDeviceData(transformedPayloads, gatewayMetadata, parsedData.gatewayInfo);
+                // Use the scheduled publisher to handle publishing logic
+                if (scheduledPublisher) {
+                    await scheduledPublisher.handleIncomingData(transformedPayloads, gatewayMetadata, parsedData.gatewayInfo);
                 } else {
-                    // Interval publishing is enabled.
-                    lastReceivedData = transformedPayloads; // Always cache the latest data.
-
-                    const currentMacs = new Set(
-                        transformedPayloads.map(p => p.mac_address.toLowerCase())
-                    );
-
-                    // Get the set of tracked devices from config
-                    const trackedDeviceMacs = new Set(config.homeAssistant.devices.keys());
-
-                    // Determine if there's a new *tracked* device in the current payload
-                    let newTrackedDeviceFound = false;
-                    const newTrackedDevices = [];
-                    if (trackedDeviceMacs.size > 0) {
-                        for (const mac of currentMacs) {
-                            if (trackedDeviceMacs.has(mac) && !seenMacsSinceLastPublish.has(mac)) {
-                                newTrackedDeviceFound = true;
-                                newTrackedDevices.push(mac);
-                            }
-                        }
-                    }
-
-                    if (newTrackedDeviceFound) {
-                        logger.info('New tracked BLE devices detected, triggering immediate publication.', { newMacs: newTrackedDevices });
-                        
-                        // Publish immediately and reset the interval timer.
-                        await publishDeviceData(lastReceivedData, gatewayMetadata, lastGatewayInfo);
-                        lastReceivedData = null; // Clear cache after publishing
-                        lastGatewayInfo = null; // Clear gateway cache after publishing
-
-                        // A publication event resets the interval.
-                        seenMacsSinceLastPublish.clear();
-                        currentMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
-
-                        // Reset the scheduled publish timer.
-                        scheduleNextPublish();
-
-                    } else {
-                        logger.debug('No new tracked devices detected. Caching data and waiting for next scheduled publish.');
-                        // Add any MACs from this payload to the set for the current interval.
-                        currentMacs.forEach(mac => seenMacsSinceLastPublish.add(mac));
-                    }
+                    // Fallback to immediate publishing if scheduled publisher is not initialized
+                    logger.warn('Scheduled publisher not initialized, falling back to immediate publishing');
+                    await publishDeviceData(transformedPayloads, gatewayMetadata, parsedData.gatewayInfo);
                 }
             } else {
                 logger.info('No JSON payloads to publish to MQTT');
-                // Still cache gateway info for potential scheduled publishing
-                if (config.mqtt.publishIntervalSeconds > 0) {
-                    lastGatewayInfo = parsedData.gatewayInfo;
+                // Handle gateway-only publishing
+                if (scheduledPublisher && config.mqtt.publishIntervalSeconds > 0) {
+                    // Let scheduled publisher handle gateway info caching
+                    await scheduledPublisher.handleIncomingData([], gatewayParser.getGatewayMetadata(parsedData.gatewayInfo), parsedData.gatewayInfo);
                 } else {
                     // Publish gateway status immediately if no interval is set
                     await publishGatewayStatus(parsedData.gatewayInfo);
@@ -431,9 +351,10 @@ app.post('/tokendata', async (req, res) => {
             }
         } else {
             logger.info('No devices to transform - skipping JSON transformation');
-            // Still cache gateway info for potential scheduled publishing
-            if (config.mqtt.publishIntervalSeconds > 0) {
-                lastGatewayInfo = parsedData.gatewayInfo;
+            // Handle gateway-only publishing
+            if (scheduledPublisher && config.mqtt.publishIntervalSeconds > 0) {
+                // Let scheduled publisher handle gateway info caching
+                await scheduledPublisher.handleIncomingData([], gatewayParser.getGatewayMetadata(parsedData.gatewayInfo), parsedData.gatewayInfo);
             } else {
                 // Publish gateway status immediately if no interval is set
                 await publishGatewayStatus(parsedData.gatewayInfo);
@@ -551,11 +472,11 @@ async function initializeApplication() {
             logger.info('Home Assistant integration is disabled');
         }
 
+        // Initialize the scheduled publisher
+        scheduledPublisher = new ScheduledPublisher(mqttClient, publishDeviceData, publishGatewayStatus);
+
         // Start scheduled publishing if enabled
-        if (config.mqtt.publishIntervalSeconds > 0) {
-            logger.info(`Initializing scheduled MQTT publishing every ${config.mqtt.publishIntervalSeconds} seconds.`);
-            scheduleNextPublish();
-        }
+        scheduledPublisher.initialize();
     } catch (error) {
         logger.error('Failed to initialize MQTT client', {
             error: error.message,
@@ -577,11 +498,10 @@ async function shutdown() {
         logger.info('Cleared discovery timer');
     }
 
-    // Clear the scheduled publish timer
-    if (publishTimeout) {
-        clearTimeout(publishTimeout);
-        publishTimeout = null;
-        logger.info('Cleared scheduled publish timer');
+    // Clear the scheduled publisher
+    if (scheduledPublisher) {
+        scheduledPublisher.shutdown();
+        scheduledPublisher = null;
     }
     
     // Disconnect MQTT client
