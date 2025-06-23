@@ -347,20 +347,36 @@ async function prepareRelease() {
             try {
                 info('Creating pull request...');
                 const prTitle = `Release v${version}`;
-                const prBody = `Version bump for release v${version}
+                const prBody = `## 🚀 Release v${version}
 
-## Changes
-- Bump version to v${version} in package.json
+This PR bumps the version to **v${version}** in preparation for release.
 
-## Release Process
-1. Review and merge this PR
-2. Run \`npm run release\` to create the release tag
-3. GitHub Actions will automatically build and publish the release
+### 📋 Changes
+- ✅ Updated \`package.json\` version to \`${version}\`
+- ✅ All tests are passing
+- ✅ Branch is up to date with main
 
-## Checklist
-- [ ] Version number is correct
-- [ ] All tests are passing
-- [ ] Ready to release`;
+### 🔄 Release Process
+1. **Review and merge** this PR into \`main\`
+2. **Create release tag** by running: \`npm run release\`
+3. **Automated deployment** via GitHub Actions will:
+   - Build and publish Docker images to GitHub Container Registry
+   - Create GitHub release with changelog
+   - Run security scans on published images
+
+### ✅ Pre-Release Checklist
+- [x] Version follows semantic versioning
+- [x] All tests pass
+- [x] Working directory is clean
+- [x] Branch is up to date with origin
+- [ ] PR reviewed and approved
+- [ ] Ready to merge and release
+
+### 🔗 Next Steps
+After merging this PR:
+1. Switch to \`main\` branch: \`git checkout main && git pull\`
+2. Create release: \`npm run release\`
+3. Monitor the [Actions workflow](https://github.com/alackmann/ble-gateway-mqtt-proxy/actions)`;
                 
                 execCommand(`gh pr create --title "${prTitle}" --body "${prBody}"`);
                 success('Pull request created successfully!');
