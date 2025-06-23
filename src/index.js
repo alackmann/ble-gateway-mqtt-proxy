@@ -103,18 +103,6 @@ async function publishGatewayStatus(gatewayInfo) {
     }
 }
 
-/**
- * Sets a timer for the next scheduled publication.
- * The callback will publish the last received data and then reschedule itself.
- */
-function scheduleNextPublish() {
-    // This function is now handled by the ScheduledPublisher class
-    // Left here for compatibility, but should not be called directly
-    if (scheduledPublisher) {
-        scheduledPublisher.scheduleNextPublish();
-    }
-}
-
 // Middleware to parse raw request bodies for MessagePack
 // Handle requests with no Content-Type header by using a custom type function
 app.use('/tokendata', express.raw({ 
