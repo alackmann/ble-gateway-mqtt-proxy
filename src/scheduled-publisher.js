@@ -48,6 +48,12 @@ class ScheduledPublisher {
             currentMacs.add(mac);
         }
 
+        logger.debug(`Updated device cache with ${devicePayloads.length} devices. Cache now contains ${this.deviceCache.size} total devices.`, {
+            currentPayloadCount: devicePayloads.length,
+            totalCachedDevices: this.deviceCache.size,
+            newMacsInPayload: currentMacs.size
+        });
+
         // Cache gateway information
         this.lastGatewayMetadata = gatewayMetadata;
         this.lastGatewayInfo = gatewayInfo;
@@ -128,14 +134,18 @@ class ScheduledPublisher {
     async performScheduledPublish() {
         logger.info(`Scheduled publish triggered after ${config.mqtt.publishIntervalSeconds} seconds.`);
         
-        // Clear the set of seen MACs for the new interval
-        this.seenMacsSinceLastPublish.clear();
+        logger.debug(`Before scheduled publish: Cache contains ${this.deviceCache.size} devices, seen ${this.seenMacsSinceLastPublish.size} MACs since last publish.`);
 
         if (this.deviceCache.size > 0) {
             // Publish all cached device data
             const allDevicePayloads = Array.from(this.deviceCache.values());
+            logger.info(`Publishing ${allDevicePayloads.length} cached devices from ${this.deviceCache.size} cache entries.`);
+            
             await this.publishDeviceDataCallback(allDevicePayloads, this.lastGatewayMetadata, this.lastGatewayInfo);
 
+            // Clear the set of seen MACs for the new interval (AFTER successful publish)
+            this.seenMacsSinceLastPublish.clear();
+            
             // Update seen MACs for the new interval
             this.deviceCache.forEach((_, mac) => {
                 this.seenMacsSinceLastPublish.add(mac);
