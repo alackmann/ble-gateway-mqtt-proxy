@@ -1,0 +1,66 @@
+name: Reusable Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: 'Docker image tag to scan'
+        required: true
+        type: string
+      registry:
+        description: 'Container registry'
+        required: false
+        default: 'ghcr.io'
+        type: string
+      wait-time:
+        description: 'Time to wait for image availability (seconds)'
+        required: false
+        default: 30
+        type: number
+
+env:
+  REGISTRY: ${{ inputs.registry }}
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+
+    steps:
+    - name: Wait for image to be available
+      run: |
+        echo "⏳ Waiting for image to be available in registry..."
+        sleep ${{ inputs.wait-time }}
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      continue-on-error: true
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image-tag }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        timeout: '15m'
+
+    - name: Check if SARIF file exists
+      id: check-sarif
+      run: |
+        if [ -f "trivy-results.sarif" ]; then
+          echo "sarif-exists=true" >> $GITHUB_OUTPUT
+          echo "✅ SARIF file created successfully"
+          ls -la trivy-results.sarif
+        else
+          echo "sarif-exists=false" >> $GITHUB_OUTPUT
+          echo "⚠️ SARIF file was not created"
+        fi
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: steps.check-sarif.outputs.sarif-exists == 'true'
+      with:
+        sarif_file: 'trivy-results.sarif'
