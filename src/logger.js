@@ -108,7 +108,7 @@ function logStartup(port, host = 'localhost') {
         info('='.repeat(60));
     }
     
-
+    info(`BLE Gateway Data Processor starting on port ${port}`);
     try {
         // Lazy load config to avoid circular dependency
         const { config } = require('./config');

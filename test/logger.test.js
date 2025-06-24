@@ -155,9 +155,16 @@ describe('Logging Framework', () => {
     describe('Specialized Logging Functions', () => {
         it('should log startup information', () => {
             const logger = require('../src/logger');
-            logger.logStartup(8000);
+            logger.logStartup(8000, '0.0.0.0');
             
             expect(consoleLogs.log.length).to.be.greaterThan(0);
+            
+            // Check for banner lines
+            expect(consoleLogs.log.some(log => log.includes('='.repeat(60)))).to.be.true;
+            expect(consoleLogs.log.some(log => log.includes('BLE-GATEWAY-MQTT-PROXY') || log.includes('BLE GATEWAY MQTT PROXY'))).to.be.true;
+            expect(consoleLogs.log.some(log => log.includes('Version:') || log.includes('Starting on'))).to.be.true;
+            
+            // Check for the original startup message
             expect(consoleLogs.log.some(log => log.includes('starting on port 8000'))).to.be.true;
         });
 
