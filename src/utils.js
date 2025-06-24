@@ -52,6 +52,24 @@ function normalizeMac(macAddress) {
 }
 
 /**
+ * Creates a normalized MAC address for comparison purposes while preserving the original format
+ * This ensures consistent comparison between config-defined devices and incoming device data.
+ * 
+ * @param {Object} devicePayload - Device payload object containing mac_address field
+ * @returns {Object} Device payload with added normalized_mac field for internal comparison
+ */
+function addNormalizedMac(devicePayload) {
+    if (!devicePayload || !devicePayload.mac_address) {
+        throw new Error('Device payload must contain mac_address field');
+    }
+    
+    return {
+        ...devicePayload,
+        normalized_mac: normalizeMac(devicePayload.mac_address)
+    };
+}
+
+/**
  * Converts a string into a URL-friendly slug
  * Example: "Car Token #1" -> "car_token_1"
  * 
@@ -80,5 +98,6 @@ function slugify(text) {
 module.exports = {
     formatMac,
     normalizeMac,
-    slugify
+    slugify,
+    addNormalizedMac
 };
