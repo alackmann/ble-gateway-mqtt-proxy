@@ -12,33 +12,20 @@ env:
 
 jobs:
   test:
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      node-version: '22'
+      run-lint: true
+
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      major_minor: ${{ steps.version.outputs.major_minor }}
+      major: ${{ steps.version.outputs.major }}
+      docker-tags: ${{ steps.tags.outputs.tags }}
     
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run tests
-      run: npm test
-
-  release-build:
-    runs-on: ubuntu-latest
-    needs: test
-    
-    permissions:
-      contents: write  # Needed for creating GitHub releases
-      packages: write  # Needed for publishing to GitHub Container Registry
-      actions: read    # Needed for reading workflow artifacts
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -75,52 +62,55 @@ jobs:
           echo "Version doesn't follow semantic versioning, using as-is"
         fi
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Prepare Docker tags
       id: tags
       run: |
-        TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}"
+        TAGS="ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}"
         
         # Add major.minor tag if available
         if [[ -n "${{ steps.version.outputs.major_minor }}" ]]; then
-          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major_minor }}"
+          TAGS="${TAGS},ghcr.io/${{ github.repository }}:${{ steps.version.outputs.major_minor }}"
         fi
         
         # Add major tag if available
         if [[ -n "${{ steps.version.outputs.major }}" ]]; then
-          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}"
+          TAGS="${TAGS},ghcr.io/${{ github.repository }}:${{ steps.version.outputs.major }}"
         fi
         
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
         echo "🏷️ Docker tags that will be created:"
         echo "${TAGS}" | tr ',' '\n'
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+  docker-build:
+    needs: [test, version]
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      push: true
+      tags: ${{ needs.version.outputs.docker-tags }}
+      labels: |
+        org.opencontainers.image.title=BLE Gateway MQTT Proxy
+        org.opencontainers.image.description=MQTT proxy for April Brother BLE Gateway v4 with Home Assistant integration
+        org.opencontainers.image.version=${{ needs.version.outputs.version }}
+        org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        org.opencontainers.image.revision=${{ github.sha }}
+        org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+        org.opencontainers.image.licenses=MIT
+      platforms: 'linux/amd64,linux/arm64'
+    secrets:
+      registry-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.tags.outputs.tags }}
-        labels: |
-          org.opencontainers.image.title=BLE Gateway MQTT Proxy
-          org.opencontainers.image.description=MQTT proxy for April Brother BLE Gateway v4 with Home Assistant integration
-          org.opencontainers.image.version=${{ steps.version.outputs.version }}
-          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          org.opencontainers.image.revision=${{ github.sha }}
-          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-          org.opencontainers.image.licenses=MIT
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+  release-build:
+    needs: [test, version, docker-build]
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write  # Needed for creating GitHub releases
+      packages: write  # Needed for publishing to GitHub Container Registry
+      actions: read    # Needed for reading workflow artifacts
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
     - name: Generate changelog
       id: changelog
@@ -129,7 +119,7 @@ jobs:
         PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
         
         if [ -n "$PREVIOUS_TAG" ]; then
-          echo "Generating changelog from ${PREVIOUS_TAG} to ${{ steps.version.outputs.tag_name }}"
+          echo "Generating changelog from ${PREVIOUS_TAG} to ${{ needs.version.outputs.tag_name }}"
           
           # Generate changelog from commits
           CHANGELOG=$(git log --pretty=format:"- %s" ${PREVIOUS_TAG}..HEAD --no-merges | grep -v "^- chore: bump version" || echo "- Initial release")
@@ -151,10 +141,10 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ steps.version.outputs.tag_name }}
-        name: Release ${{ steps.version.outputs.version }}
+        tag_name: ${{ needs.version.outputs.tag_name }}
+        name: Release ${{ needs.version.outputs.version }}
         body: |
-          ## Release ${{ steps.version.outputs.version }}
+          ## Release ${{ needs.version.outputs.version }}
           
           ### Changes
           
@@ -166,13 +156,13 @@ jobs:
           
           ```bash
           # Pull specific version
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          docker pull ghcr.io/${{ github.repository }}:${{ needs.version.outputs.version }}
           
           # Pull major.minor version (if semantic versioning)
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major_minor }}
+          docker pull ghcr.io/${{ github.repository }}:${{ needs.version.outputs.major_minor }}
           
           # Pull major version (if semantic versioning)
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}
+          docker pull ghcr.io/${{ github.repository }}:${{ needs.version.outputs.major }}
           ```
           
           ### Usage
@@ -182,45 +172,8 @@ jobs:
         prerelease: false
 
   security-scan:
-    runs-on: ubuntu-latest
-    needs: release-build
-    continue-on-error: true
-    
-    permissions:
-      contents: read
-      packages: read
-      security-events: write
-
-    steps:
-    - name: Extract version from tag
-      id: version
-      run: |
-        TAG_NAME=${GITHUB_REF#refs/tags/}
-        if [[ "${TAG_NAME}" == tags/v* ]]; then
-          VERSION=${TAG_NAME#tags/v}
-        elif [[ "${TAG_NAME}" == v* ]]; then
-          VERSION=${TAG_NAME#v}
-        else
-          VERSION=${TAG_NAME}
-        fi
-        echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-    - name: Wait for image to be available
-      run: |
-        echo "⏳ Waiting for image to be available in registry..."
-        sleep 60
-
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        timeout: '15m'
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
+    needs: [docker-build, version]
+    uses: ./.github/workflows/reusable-security.yml
+    with:
+      image-tag: ${{ needs.version.outputs.version }}
+      wait-time: 60

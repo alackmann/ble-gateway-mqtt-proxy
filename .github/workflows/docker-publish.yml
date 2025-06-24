@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - develop
-    tags:
-      - 'tags/v*'
+    # Remove tags trigger to avoid conflict with release.yml
   pull_request:
     branches:
       - main
@@ -17,28 +16,15 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run tests
-      run: npm test
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      node-version: '22'
+      run-lint: false  # Skip lint for faster development builds
 
   build-and-push:
-    runs-on: ubuntu-latest
     needs: test
     if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
     
     permissions:
       contents: read
@@ -48,42 +34,36 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Determine Docker tags
+      id: tags
+      run: |
+        REPO="ghcr.io/${{ github.repository }}"
+        BRANCH="${{ github.ref_name }}"
+        
+        if [[ "$BRANCH" == "develop" ]]; then
+          # Development builds get both branch name and beta tag
+          TAGS="${REPO}:${BRANCH},${REPO}:beta"
+        elif [[ "$BRANCH" == "main" ]]; then
+          # Main branch gets latest tag (stable releases)
+          TAGS="${REPO}:${BRANCH},${REPO}:latest"
+        else
+          # Feature branches get only branch name
+          TAGS="${REPO}:${BRANCH}"
+        fi
+        
+        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+        echo "🏷️ Docker tags for branch '${BRANCH}':"
+        echo "${TAGS}" | tr ',' '\n'
+
     - name: Log in to Container Registry
       uses: docker/login-action@v3
       with:
-        registry: ${{ env.REGISTRY }}
+        registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch,pattern={{branch}}
-          type=ref,event=tag,pattern=tags/v{{version}}
-          type=ref,event=tag,pattern=tags/{{version}}
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=raw,value=beta,enable={{branch `develop`}}
-        labels: |
-          org.opencontainers.image.title=BLE Gateway MQTT Proxy
-          org.opencontainers.image.description=MQTT proxy for April Brother BLE Gateway v4 with Home Assistant integration
-          org.opencontainers.image.source={{url}}
-          org.opencontainers.image.revision={{sha}}
-          org.opencontainers.image.created={{date 'iso8601'}}
-          org.opencontainers.image.licenses=MIT
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-
-    - name: Show Docker tags that will be created
-      run: |
-        echo "🏷️ Docker tags that will be created:"
-        echo "${{ steps.meta.outputs.tags }}"
-        echo ""
-        echo "📋 Docker labels that will be applied:"
-        echo "${{ steps.meta.outputs.labels }}"
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -91,51 +71,21 @@ jobs:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+        tags: ${{ steps.tags.outputs.tags }}
+        labels: |
+          org.opencontainers.image.title=BLE Gateway MQTT Proxy
+          org.opencontainers.image.description=MQTT proxy for April Brother BLE Gateway v4 with Home Assistant integration
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+          org.opencontainers.image.licenses=MIT
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
   security-scan:
-    runs-on: ubuntu-latest
     needs: build-and-push
     if: github.event_name != 'pull_request'
-    continue-on-error: true  # Don't fail the entire workflow if security scan fails
-    
-    permissions:
-      contents: read
-      packages: read
-      security-events: write
-
-    steps:
-    - name: Wait for image to be available
-      run: |
-        echo "⏳ Waiting for image to be available in registry..."
-        sleep 30
-
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        timeout: '15m'
-
-    - name: Check if SARIF file exists
-      id: check-sarif
-      run: |
-        if [ -f "trivy-results.sarif" ]; then
-          echo "sarif-exists=true" >> $GITHUB_OUTPUT
-          echo "✅ SARIF file created successfully"
-          ls -la trivy-results.sarif
-        else
-          echo "sarif-exists=false" >> $GITHUB_OUTPUT
-          echo "⚠️ SARIF file was not created"
-        fi
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: steps.check-sarif.outputs.sarif-exists == 'true'
-      with:
-        sarif_file: 'trivy-results.sarif'
+    uses: ./.github/workflows/reusable-security.yml
+    with:
+      image-tag: ${{ github.ref_name == 'develop' && 'beta' || github.ref_name }}
+      wait-time: 30
