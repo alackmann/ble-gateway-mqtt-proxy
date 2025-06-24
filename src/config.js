@@ -100,15 +100,11 @@ function parseHomeAssistantDevices() {
                 throw new Error(`Invalid format for ${deviceVar}: ${deviceEnvVar}. Expected format: "MAC,Name"`);
             }
             
-            // Remove colons if present
-            const macWithoutColons = mac.replace(/:/g, '');
+            // Use utility function for consistent MAC address normalization
+            const { normalizeMac } = require('./utils');
+            const normalizedMac = normalizeMac(mac);
             
-            // Basic MAC validation (without colons)
-            if (!/^[0-9a-fA-F]{12}$/.test(macWithoutColons)) {
-                throw new Error(`Invalid MAC address format in ${deviceVar}: ${mac}. Expected 12 hex characters with or without colons.`);
-            }
-            
-            deviceMap.set(macWithoutColons.toLowerCase(), { name });
+            deviceMap.set(normalizedMac, { name });
             
         } catch (error) {
             try {

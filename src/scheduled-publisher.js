@@ -5,6 +5,7 @@
 
 const logger = require('./logger');
 const { config } = require('./config');
+const { normalizeMac } = require('./utils');
 
 class ScheduledPublisher {
     constructor(mqttClient, publishDeviceDataCallback, publishGatewayStatusCallback) {
@@ -43,9 +44,9 @@ class ScheduledPublisher {
         // Update device cache with latest data for each device
         const currentMacs = new Set();
         for (const payload of devicePayloads) {
-            const mac = payload.mac_address.toLowerCase();
-            this.deviceCache.set(mac, payload);
-            currentMacs.add(mac);
+            const normalizedMac = normalizeMac(payload.mac_address);
+            this.deviceCache.set(normalizedMac, payload);
+            currentMacs.add(normalizedMac);
         }
 
         logger.debug(`Updated device cache with ${devicePayloads.length} devices. Cache now contains ${this.deviceCache.size} total devices.`, {
@@ -72,8 +73,8 @@ class ScheduledPublisher {
             
             // Reset interval tracking
             this.seenMacsSinceLastPublish.clear();
-            this.deviceCache.forEach((_, mac) => {
-                this.seenMacsSinceLastPublish.add(mac);
+            this.deviceCache.forEach((_, normalizedMac) => {
+                this.seenMacsSinceLastPublish.add(normalizedMac);
             });
             
             // Reset the scheduled publish timer
@@ -82,15 +83,15 @@ class ScheduledPublisher {
         } else {
             logger.debug('No new tracked devices detected. Caching data and waiting for next scheduled publish.');
             // Add any MACs from this payload to the set for the current interval
-            currentMacs.forEach(mac => this.seenMacsSinceLastPublish.add(mac));
+            currentMacs.forEach(normalizedMac => this.seenMacsSinceLastPublish.add(normalizedMac));
             return false;
         }
     }
 
     /**
      * Identifies new tracked devices that haven't been seen in the current interval
-     * @param {Set<string>} currentMacs - Set of MAC addresses from current payload
-     * @returns {Array<string>} Array of MAC addresses for new tracked devices
+     * @param {Set<string>} currentMacs - Set of normalized MAC addresses from current payload
+     * @returns {Array<string>} Array of normalized MAC addresses for new tracked devices
      */
     identifyNewTrackedDevices(currentMacs) {
         const trackedDeviceMacs = new Set(config.homeAssistant.devices.keys());
@@ -101,9 +102,9 @@ class ScheduledPublisher {
             return newTrackedDevices;
         }
 
-        for (const mac of currentMacs) {
-            if (trackedDeviceMacs.has(mac) && !this.seenMacsSinceLastPublish.has(mac)) {
-                newTrackedDevices.push(mac);
+        for (const normalizedMac of currentMacs) {
+            if (trackedDeviceMacs.has(normalizedMac) && !this.seenMacsSinceLastPublish.has(normalizedMac)) {
+                newTrackedDevices.push(normalizedMac);
             }
         }
 

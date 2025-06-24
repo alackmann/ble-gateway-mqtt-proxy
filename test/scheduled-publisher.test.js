@@ -117,8 +117,8 @@ describe('ScheduledPublisher', () => {
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(2);
             expect(state.seenMacsCount).to.equal(2);
-            expect(state.deviceMacs).to.include('aa:bb:cc:dd:ee:ff'); // Should be normalized to lowercase
-            expect(state.deviceMacs).to.include('ff:ee:dd:cc:bb:aa'); // Should be normalized to lowercase
+            expect(state.deviceMacs).to.include('aabbccddeeff'); // Should be normalized to lowercase without colons
+            expect(state.deviceMacs).to.include('ffeeddccbbaa'); // Should be normalized to lowercase without colons
         });
 
         it('should update existing device data with latest information', async () => {
@@ -147,8 +147,8 @@ describe('ScheduledPublisher', () => {
         });
 
         it('should trigger immediate publish when new tracked device appears', async () => {
-            // Configure a tracked device (config expects lowercase MAC)
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Test Device' });
+            // Configure a tracked device (config expects normalized lowercase MAC without colons)
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
 
             // First, add some untracked devices to cache
             await scheduledPublisher.handleIncomingData(
@@ -176,8 +176,8 @@ describe('ScheduledPublisher', () => {
         });
 
         it('should not trigger immediate publish for already seen tracked device', async () => {
-            // Configure a tracked device (config expects lowercase MAC)
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Test Device' });
+            // Configure a tracked device (config expects normalized lowercase MAC without colons)
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
 
             // First payload with tracked device (gateway sends uppercase)
             const result1 = await scheduledPublisher.handleIncomingData(
@@ -373,13 +373,13 @@ describe('ScheduledPublisher', () => {
             // Should be treated as the same device
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(1);
-            expect(state.deviceMacs).to.include('aa:bb:cc:dd:ee:ff'); // Should be normalized to lowercase
+            expect(state.deviceMacs).to.include('aabbccddeeff'); // Should be normalized to lowercase without colons
         });
 
         it('should handle multiple tracked devices in single payload', async () => {
-            // Configure multiple tracked devices (config expects lowercase MAC)
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
-            config.homeAssistant.devices.set('ff:ee:dd:cc:bb:aa', { name: 'Device 2' });
+            // Configure multiple tracked devices (config expects normalized lowercase MAC without colons)
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Device 1' });
+            config.homeAssistant.devices.set('ffeeddccbbaa', { name: 'Device 2' });
 
             const result = await scheduledPublisher.handleIncomingData(
                 [
@@ -398,7 +398,7 @@ describe('ScheduledPublisher', () => {
         });
 
         it('should handle rescheduling when immediate publish occurs', async () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Test Device' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
             scheduledPublisher.initialize();
             expect(scheduledPublisher.getState().hasScheduledPublish).to.equal(true);
 
@@ -426,8 +426,8 @@ describe('ScheduledPublisher', () => {
         });
 
         it('should return empty array when no current MACs match tracked devices', () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
-            config.homeAssistant.devices.set('ff:ee:dd:cc:bb:aa', { name: 'Device 2' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
+            config.homeAssistant.devices.set('ffeeddccbbaa', { name: 'Device 2' });
             const currentMacs = new Set(['11:22:33:44:55:66', '77:88:99:aa:bb:cc']); // Normalized MACs
             
             const result = scheduledPublisher.identifyNewTrackedDevices(currentMacs);
@@ -437,40 +437,40 @@ describe('ScheduledPublisher', () => {
         });
 
         it('should return all tracked devices when none have been seen before', () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
-            config.homeAssistant.devices.set('ff:ee:dd:cc:bb:aa', { name: 'Device 2' });
-            const currentMacs = new Set(['aa:bb:cc:dd:ee:ff', 'ff:ee:dd:cc:bb:aa', '11:22:33:44:55:66']); // Normalized MACs
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
+            config.homeAssistant.devices.set('ffeeddccbbaa', { name: 'Device 2' });
+            const currentMacs = new Set(['aabbccddeeff', 'ffeeddccbbaa', '112233445566']); // Normalized MACs
             
             const result = scheduledPublisher.identifyNewTrackedDevices(currentMacs);
             
             expect(result).to.be.an('array');
             expect(result).to.have.length(2);
-            expect(result).to.include('aa:bb:cc:dd:ee:ff');
-            expect(result).to.include('ff:ee:dd:cc:bb:aa');
+            expect(result).to.include('aabbccddeeff');
+            expect(result).to.include('ffeeddccbbaa');
         });
 
         it('should return only new tracked devices when some have been seen before', () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
-            config.homeAssistant.devices.set('ff:ee:dd:cc:bb:aa', { name: 'Device 2' });
-            config.homeAssistant.devices.set('11:22:33:44:55:66', { name: 'Device 3' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
+            config.homeAssistant.devices.set('ffeeddccbbaa', { name: 'Device 2' });
+            config.homeAssistant.devices.set('112233445566', { name: 'Device 3' });
             
             // Mark one device as already seen
-            scheduledPublisher.seenMacsSinceLastPublish.add('aa:bb:cc:dd:ee:ff');
+            scheduledPublisher.seenMacsSinceLastPublish.add('aabbccddeeff');
             
-            const currentMacs = new Set(['aa:bb:cc:dd:ee:ff', 'ff:ee:dd:cc:bb:aa', '77:88:99:aa:bb:cc']); // Normalized MACs
+            const currentMacs = new Set(['aabbccddeeff', 'ffeeddccbbaa', '778899aabbcc']); // Normalized MACs
             
             const result = scheduledPublisher.identifyNewTrackedDevices(currentMacs);
             
             expect(result).to.be.an('array');
             expect(result).to.have.length(1);
-            expect(result).to.include('ff:ee:dd:cc:bb:aa');
-            expect(result).to.not.include('aa:bb:cc:dd:ee:ff'); // Already seen
-            expect(result).to.not.include('77:88:99:aa:bb:cc'); // Not tracked
+            expect(result).to.include('ffeeddccbbaa');
+            expect(result).to.not.include('aabbccddeeff'); // Already seen
+            expect(result).to.not.include('778899aabbcc'); // Not tracked
         });
 
         it('should return empty array when all tracked devices have been seen', () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
-            config.homeAssistant.devices.set('ff:ee:dd:cc:bb:aa', { name: 'Device 2' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
+            config.homeAssistant.devices.set('ffeeddccbbaa', { name: 'Device 2' });
             
             // Mark both devices as already seen
             scheduledPublisher.seenMacsSinceLastPublish.add('aa:bb:cc:dd:ee:ff');
@@ -485,7 +485,7 @@ describe('ScheduledPublisher', () => {
         });
 
         it('should handle empty current MACs set', () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
             const currentMacs = new Set();
             
             const result = scheduledPublisher.identifyNewTrackedDevices(currentMacs);
@@ -496,52 +496,52 @@ describe('ScheduledPublisher', () => {
 
         it('should handle case sensitivity correctly - MACs are normalized before this method', () => {
             // Config uses lowercase (as per real configuration)
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
             
             // Current MACs are already normalized to lowercase when this method is called
-            const currentMacs = new Set(['aa:bb:cc:dd:ee:ff']); // Normalized MAC
+            const currentMacs = new Set(['aabbccddeeff']); // Normalized MAC
             
             const result = scheduledPublisher.identifyNewTrackedDevices(currentMacs);
             
             expect(result).to.be.an('array');
             expect(result).to.have.length(1);
-            expect(result).to.include('aa:bb:cc:dd:ee:ff');
+            expect(result).to.include('aabbccddeeff');
         });
 
         it('should handle multiple new tracked devices in single call', () => {
-            config.homeAssistant.devices.set('aa:bb:cc:dd:ee:ff', { name: 'Device 1' });
-            config.homeAssistant.devices.set('ff:ee:dd:cc:bb:aa', { name: 'Device 2' });
-            config.homeAssistant.devices.set('11:22:33:44:55:66', { name: 'Device 3' });
-            config.homeAssistant.devices.set('77:88:99:aa:bb:cc', { name: 'Device 4' });
+            config.homeAssistant.devices.set('aabbccddeeff', { name: 'Test Device' });
+            config.homeAssistant.devices.set('ffeeddccbbaa', { name: 'Device 2' });
+            config.homeAssistant.devices.set('112233445566', { name: 'Device 3' });
+            config.homeAssistant.devices.set('778899aabbcc', { name: 'Device 4' });
             
             // Mark some devices as seen
-            scheduledPublisher.seenMacsSinceLastPublish.add('aa:bb:cc:dd:ee:ff');
-            scheduledPublisher.seenMacsSinceLastPublish.add('77:88:99:aa:bb:cc');
+            scheduledPublisher.seenMacsSinceLastPublish.add('aabbccddeeff');
+            scheduledPublisher.seenMacsSinceLastPublish.add('778899aabbcc');
             
             const currentMacs = new Set([
-                'aa:bb:cc:dd:ee:ff', // Tracked, already seen
-                'ff:ee:dd:cc:bb:aa', // Tracked, new
-                '11:22:33:44:55:66', // Tracked, new
-                '77:88:99:aa:bb:cc', // Tracked, already seen
-                'dd:dd:dd:dd:dd:dd'  // Not tracked
+                'aabbccddeeff', // Tracked, already seen
+                'ffeeddccbbaa', // Tracked, new
+                '112233445566', // Tracked, new
+                '778899aabbcc', // Tracked, already seen
+                'dddddddddddd'  // Not tracked
             ]); // All normalized MACs
             
             const result = scheduledPublisher.identifyNewTrackedDevices(currentMacs);
             
             expect(result).to.be.an('array');
             expect(result).to.have.length(2);
-            expect(result).to.include('ff:ee:dd:cc:bb:aa');
-            expect(result).to.include('11:22:33:44:55:66');
-            expect(result).to.not.include('aa:bb:cc:dd:ee:ff');
-            expect(result).to.not.include('77:88:99:aa:bb:cc');
-            expect(result).to.not.include('dd:dd:dd:dd:dd:dd');
+            expect(result).to.include('ffeeddccbbaa');
+            expect(result).to.include('112233445566');
+            expect(result).to.not.include('aabbccddeeff');
+            expect(result).to.not.include('778899aabbcc');
+            expect(result).to.not.include('dddddddddddd');
         });
     });
 
     describe('realistic gateway data', () => {
         it('should handle realistic gateway MAC address format in end-to-end scenario', async () => {
             // Configure tracked device (config expects lowercase)
-            config.homeAssistant.devices.set('4d:fb:56:9a:c3:30', { name: 'Real BLE Device' });
+            config.homeAssistant.devices.set('4dfb569ac330', { name: 'Real BLE Device' });
 
             // Simulate realistic gateway payload (uppercase MAC as provided by gateway)
             const realisticDevicePayload = {
@@ -566,8 +566,8 @@ describe('ScheduledPublisher', () => {
             // Check that the device was cached with normalized MAC
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(1);
-            expect(state.deviceMacs).to.include('4d:fb:56:9a:c3:30'); // Should be normalized to lowercase
-            expect(state.seenMacs).to.include('4d:fb:56:9a:c3:30'); // Should be normalized to lowercase
+            expect(state.deviceMacs).to.include('4dfb569ac330'); // Should be normalized to lowercase without colons
+            expect(state.seenMacs).to.include('4dfb569ac330'); // Should be normalized to lowercase without colons
 
             // Reset mock for second test
             mockPublishDeviceData.resetHistory();
