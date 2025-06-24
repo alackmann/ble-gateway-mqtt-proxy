@@ -86,10 +86,29 @@ function debug(message, data = null) {
 }
 
 /**
- * Log application startup information
+ * Log application startup information with banner
  */
-function logStartup(port) {
-    info(`BLE Gateway Data Processor starting on port ${port}`);
+function logStartup(port, host = 'localhost') {
+    // Display startup banner with version
+    try {
+        const packageJson = require('../package.json');
+        const version = packageJson.version;
+        const name = packageJson.name;
+        
+        info('='.repeat(60));
+        info(`  ${name.toUpperCase()}`);
+        info(`  Version: ${version}`);
+        info(`  Starting on ${host}:${port}`);
+        info('='.repeat(60));
+    } catch (error) {
+        // Fallback if package.json is not available
+        info('='.repeat(60));
+        info('  BLE GATEWAY MQTT PROXY');
+        info(`  Starting on ${host}:${port}`);
+        info('='.repeat(60));
+    }
+    
+
     try {
         // Lazy load config to avoid circular dependency
         const { config } = require('./config');
