@@ -15,7 +15,6 @@ class ScheduledPublisher {
         
         // State management
         this.deviceCache = new Map(); // MAC -> { data: device_payload, ttl: timestamp }
-        this.seenMacsSinceLastPublish = new Set();
         this.publishTimeout = null;
         this.lastGatewayMetadata = null;
         this.lastGatewayInfo = null;
@@ -89,22 +88,13 @@ class ScheduledPublisher {
             });
             
             // Publish immediately with all cached device data
-            const allDevicePayloads = Array.from(this.deviceCache.values()).map(entry => entry.data);
-            await this.publishDeviceDataCallback(allDevicePayloads, gatewayMetadata, gatewayInfo);
-            
-            // Reset interval tracking
-            this.seenMacsSinceLastPublish.clear();
-            this.deviceCache.forEach((_, normalizedMac) => {
-                this.seenMacsSinceLastPublish.add(normalizedMac);
-            });
+            await this.publishCachedDevices(gatewayMetadata, gatewayInfo, 'Immediate publish due to new tracked devices');
             
             // Reset the scheduled publish timer
             this.scheduleNextPublish();
             return true;
         } else {
             logger.debug('No new tracked devices detected. Caching data and waiting for next scheduled publish.');
-            // Add any MACs from this payload to the set for the current interval
-            currentMacs.forEach(normalizedMac => this.seenMacsSinceLastPublish.add(normalizedMac));
             return false;
         }
     }
@@ -125,7 +115,6 @@ class ScheduledPublisher {
         
         for (const normalizedMac of expiredDevices) {
             this.deviceCache.delete(normalizedMac);
-            this.seenMacsSinceLastPublish.delete(normalizedMac);
         }
         
         return {
@@ -154,6 +143,30 @@ class ScheduledPublisher {
     }
 
     /**
+     * Publishes all cached device data
+     * @param {Object} gatewayMetadata - Gateway metadata for logging
+     * @param {Object} gatewayInfo - Gateway info for publishing
+     * @param {string} triggerReason - Reason for publishing (for logging)
+     * @returns {Promise<void>}
+     */
+    async publishCachedDevices(gatewayMetadata, gatewayInfo, triggerReason) {
+        if (this.deviceCache.size === 0) {
+            logger.debug(`${triggerReason}: No device data in cache to publish.`);
+            return;
+        }
+
+        // Get all cached device data
+        const allDevicePayloads = Array.from(this.deviceCache.values()).map(entry => entry.data);
+        
+        logger.info(`${triggerReason}: Publishing ${allDevicePayloads.length} cached devices from ${this.deviceCache.size} cache entries.`);
+        
+        // Publish the devices
+        await this.publishDeviceDataCallback(allDevicePayloads, gatewayMetadata, gatewayInfo);
+        
+        logger.info(`${triggerReason}: Completed publishing ${allDevicePayloads.length} devices.`);
+    }
+
+    /**
      * Performs the scheduled publication
      */
     async performScheduledPublish() {
@@ -171,26 +184,12 @@ class ScheduledPublisher {
             });
         }
         
-        logger.debug(`Before scheduled publish: Cache contains ${this.deviceCache.size} devices, seen ${this.seenMacsSinceLastPublish.size} MACs since last publish.`);
-
-        if (this.deviceCache.size > 0) {
-            // Publish all cached device data
-            const allDevicePayloads = Array.from(this.deviceCache.values()).map(entry => entry.data);
-            logger.info(`Publishing ${allDevicePayloads.length} cached devices from ${this.deviceCache.size} cache entries.`);
-            
-            await this.publishDeviceDataCallback(allDevicePayloads, this.lastGatewayMetadata, this.lastGatewayInfo);
-
-            // DON'T clear the device cache - keep devices for retention period
-            // Only clear the interval tracking
-            this.seenMacsSinceLastPublish.clear();
-            
-            logger.info(`Scheduled publish completed for ${allDevicePayloads.length} devices. Interval tracking reset, cache retained.`);
-        } else {
-            logger.info('Scheduled publish: No device data in cache to publish.');
-            // Still publish gateway status if available
-            if (this.lastGatewayInfo) {
-                await this.publishGatewayStatusCallback(this.lastGatewayInfo);
-            }
+        // Publish all cached device data (method handles empty cache case)
+        await this.publishCachedDevices(this.lastGatewayMetadata, this.lastGatewayInfo, 'Scheduled publish');
+        
+        // If no devices were published, still publish gateway status if available
+        if (this.deviceCache.size === 0 && this.lastGatewayInfo) {
+            await this.publishGatewayStatusCallback(this.lastGatewayInfo);
         }
 
         // Schedule the next run
@@ -219,7 +218,6 @@ class ScheduledPublisher {
         
         // Clear state
         this.deviceCache.clear();
-        this.seenMacsSinceLastPublish.clear();
         this.lastGatewayMetadata = null;
         this.lastGatewayInfo = null;
     }
@@ -231,10 +229,8 @@ class ScheduledPublisher {
     getState() {
         return {
             deviceCacheSize: this.deviceCache.size,
-            seenMacsCount: this.seenMacsSinceLastPublish.size,
             hasScheduledPublish: this.publishTimeout !== null,
             deviceMacs: Array.from(this.deviceCache.keys()),
-            seenMacs: Array.from(this.seenMacsSinceLastPublish),
             deviceCacheRetentionMs: this.deviceCacheRetentionMs
         };
     }
@@ -244,7 +240,6 @@ class ScheduledPublisher {
      */
     clearCache() {
         this.deviceCache.clear();
-        this.seenMacsSinceLastPublish.clear();
         this.lastGatewayMetadata = null;
         this.lastGatewayInfo = null;
     }

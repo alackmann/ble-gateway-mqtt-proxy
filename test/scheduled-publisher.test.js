@@ -62,10 +62,8 @@ describe('ScheduledPublisher', () => {
         it('should initialize with empty state', () => {
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(0);
-            expect(state.seenMacsCount).to.equal(0);
             expect(state.hasScheduledPublish).to.equal(false);
             expect(state.deviceMacs).to.deep.equal([]);
-            expect(state.seenMacs).to.deep.equal([]);
         });
     });
 
@@ -120,7 +118,6 @@ describe('ScheduledPublisher', () => {
 
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(2);
-            expect(state.seenMacsCount).to.equal(2);
             expect(state.deviceMacs).to.include('aabbccddeeff'); // Should be normalized to lowercase without colons
             expect(state.deviceMacs).to.include('ffeeddccbbaa'); // Should be normalized to lowercase without colons
         });
@@ -142,7 +139,6 @@ describe('ScheduledPublisher', () => {
 
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(1);
-            expect(state.seenMacsCount).to.equal(1);
 
             // Verify the latest data is cached
             const cachedDevices = Array.from(scheduledPublisher.deviceCache.values()).map(entry => entry.data);
@@ -302,7 +298,6 @@ describe('ScheduledPublisher', () => {
             // Verify devices are cached before publish
             const stateBefore = scheduledPublisher.getState();
             expect(stateBefore.deviceCacheSize).to.equal(2);
-            expect(stateBefore.seenMacsCount).to.equal(2);
 
             scheduledPublisher.initialize();
 
@@ -310,12 +305,10 @@ describe('ScheduledPublisher', () => {
             clock.tick(5000);
             await clock.tickAsync(0);
 
-            // Device cache should be retained, but seen MACs should be cleared after publish
+            // Device cache should be retained after scheduled publish
             const stateAfter = scheduledPublisher.getState();
             expect(stateAfter.deviceCacheSize).to.equal(2); // Cache should be retained
-            expect(stateAfter.seenMacsCount).to.equal(0); // Seen MACs should be empty
             expect(stateAfter.deviceMacs).to.have.length(2); // Devices still in cache
-            expect(stateAfter.seenMacs).to.deep.equal([]); // No seen MACs
             
             // Verify publish was called with the correct data
             expect(mockPublishDeviceData.callCount).to.equal(1);
@@ -330,14 +323,12 @@ describe('ScheduledPublisher', () => {
             
             // Add some data
             scheduledPublisher.deviceCache.set('test', { mac_address: 'test' });
-            scheduledPublisher.seenMacsSinceLastPublish.add('test');
 
             scheduledPublisher.shutdown();
 
             const state = scheduledPublisher.getState();
             expect(state.hasScheduledPublish).to.equal(false);
             expect(state.deviceCacheSize).to.equal(0);
-            expect(state.seenMacsCount).to.equal(0);
         });
     });
 
@@ -355,7 +346,6 @@ describe('ScheduledPublisher', () => {
 
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(0);
-            expect(state.seenMacsCount).to.equal(0);
         });
     });
 
@@ -490,7 +480,6 @@ describe('ScheduledPublisher', () => {
             const state = scheduledPublisher.getState();
             expect(state.deviceCacheSize).to.equal(1);
             expect(state.deviceMacs).to.include('4dfb569ac330'); // Should be normalized to lowercase without colons
-            expect(state.seenMacs).to.include('4dfb569ac330'); // Should be normalized to lowercase without colons
 
             // Reset mock for second test
             mockPublishDeviceData.resetHistory();
