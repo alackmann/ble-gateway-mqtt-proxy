@@ -150,6 +150,18 @@ class ScheduledPublisher {
      * @returns {Promise<void>}
      */
     async publishCachedDevices(gatewayMetadata, gatewayInfo, triggerReason) {
+        const now = Date.now();
+        
+        // Clean up expired devices before publishing
+        const cleanupStats = this.cleanupExpiredDevices(now);
+        if (cleanupStats.expiredCount > 0) {
+            logger.info(`Cleaned up ${cleanupStats.expiredCount} expired devices from cache. ${cleanupStats.remainingCount} devices remain.`, {
+                expiredCount: cleanupStats.expiredCount,
+                remainingCount: cleanupStats.remainingCount,
+                retentionSeconds: this.deviceCacheRetentionMs / 1000
+            });
+        }
+
         if (this.deviceCache.size === 0) {
             logger.debug(`${triggerReason}: No device data in cache to publish.`);
             return;
@@ -172,19 +184,7 @@ class ScheduledPublisher {
     async performScheduledPublish() {
         logger.info(`Scheduled publish triggered after ${config.mqtt.publishIntervalSeconds} seconds.`);
         
-        const now = Date.now();
-        
-        // Clean up expired devices before publishing
-        const cleanupStats = this.cleanupExpiredDevices(now);
-        if (cleanupStats.expiredCount > 0) {
-            logger.info(`Cleaned up ${cleanupStats.expiredCount} expired devices from cache. ${cleanupStats.remainingCount} devices remain.`, {
-                expiredCount: cleanupStats.expiredCount,
-                remainingCount: cleanupStats.remainingCount,
-                retentionSeconds: this.deviceCacheRetentionMs / 1000
-            });
-        }
-        
-        // Publish all cached device data (method handles empty cache case)
+        // Publish all cached device data (method handles cleanup and empty cache case)
         await this.publishCachedDevices(this.lastGatewayMetadata, this.lastGatewayInfo, 'Scheduled publish');
         
         // If no devices were published, still publish gateway status if available
