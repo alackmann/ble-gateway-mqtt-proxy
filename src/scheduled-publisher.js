@@ -14,16 +14,20 @@ class ScheduledPublisher {
         this.publishGatewayStatusCallback = publishGatewayStatusCallback;
         
         // State management
-        this.deviceCache = new Map(); // MAC -> latest device data
+        this.deviceCache = new Map(); // MAC -> { data: device_payload, ttl: timestamp }
         this.seenMacsSinceLastPublish = new Set();
         this.publishTimeout = null;
         this.lastGatewayMetadata = null;
         this.lastGatewayInfo = null;
         
+        // Configuration for device absence detection and cache management
+        this.deviceCacheRetentionMs = (config.mqtt.deviceCacheRetentionSeconds || 300) * 1000;
+        
         // Bind methods to maintain context
         this.handleIncomingData = this.handleIncomingData.bind(this);
         this.scheduleNextPublish = this.scheduleNextPublish.bind(this);
         this.performScheduledPublish = this.performScheduledPublish.bind(this);
+        this.cleanupExpiredDevices = this.cleanupExpiredDevices.bind(this);
     }
 
     /**
@@ -41,12 +45,31 @@ class ScheduledPublisher {
             return true;
         }
 
-        // Update device cache with latest data for each device
+        const now = Date.now();
+
+        // Update device cache with latest data and TTL for each device
         const currentMacs = new Set();
+        const newTrackedDevices = []; // Track new HA devices being added to cache
+        
         for (const payload of devicePayloads) {
             const normalizedMac = normalizeMac(payload.mac_address);
-            this.deviceCache.set(normalizedMac, payload);
+            const ttl = now + this.deviceCacheRetentionMs;
+            
+            const existingEntry = this.deviceCache.get(normalizedMac);
+            const isNewToCache = !existingEntry || existingEntry.ttl < now; // Consider expired devices as "new"
+            
+            // Update or add device to cache
+            this.deviceCache.set(normalizedMac, {
+                data: payload,
+                ttl: ttl
+            });
             currentMacs.add(normalizedMac);
+            
+            // Check if this is a new HA device being added to cache (or returning after expiry)
+            if (isNewToCache && config.homeAssistant.devices.has(normalizedMac)) {
+                newTrackedDevices.push(normalizedMac);
+                logger.debug(`New tracked device ${normalizedMac} added to cache - will trigger immediate publish`);
+            }
         }
 
         logger.debug(`Updated device cache with ${devicePayloads.length} devices. Cache now contains ${this.deviceCache.size} total devices.`, {
@@ -59,16 +82,14 @@ class ScheduledPublisher {
         this.lastGatewayMetadata = gatewayMetadata;
         this.lastGatewayInfo = gatewayInfo;
 
-        // Check for new tracked devices
-        const newTrackedDevices = this.identifyNewTrackedDevices(currentMacs);
-
+        // Check for new tracked devices being added to cache
         if (newTrackedDevices.length > 0) {
             logger.info('New tracked BLE devices detected, triggering immediate publication.', { 
                 newMacs: newTrackedDevices 
             });
             
             // Publish immediately with all cached device data
-            const allDevicePayloads = Array.from(this.deviceCache.values());
+            const allDevicePayloads = Array.from(this.deviceCache.values()).map(entry => entry.data);
             await this.publishDeviceDataCallback(allDevicePayloads, gatewayMetadata, gatewayInfo);
             
             // Reset interval tracking
@@ -89,26 +110,29 @@ class ScheduledPublisher {
     }
 
     /**
-     * Identifies new tracked devices that haven't been seen in the current interval
-     * @param {Set<string>} currentMacs - Set of normalized MAC addresses from current payload
-     * @returns {Array<string>} Array of normalized MAC addresses for new tracked devices
+     * Cleans up expired devices from cache based on TTL
+     * @param {number} now - Current timestamp
+     * @returns {Object} Stats about cleanup operation
      */
-    identifyNewTrackedDevices(currentMacs) {
-        const trackedDeviceMacs = new Set(config.homeAssistant.devices.keys());
-        const newTrackedDevices = [];
-
-        if (trackedDeviceMacs.size === 0) {
-            // No tracked devices configured
-            return newTrackedDevices;
-        }
-
-        for (const normalizedMac of currentMacs) {
-            if (trackedDeviceMacs.has(normalizedMac) && !this.seenMacsSinceLastPublish.has(normalizedMac)) {
-                newTrackedDevices.push(normalizedMac);
+    cleanupExpiredDevices(now) {
+        const expiredDevices = [];
+        
+        for (const [normalizedMac, cacheEntry] of this.deviceCache.entries()) {
+            if (cacheEntry.ttl < now) {
+                expiredDevices.push(normalizedMac);
             }
         }
-
-        return newTrackedDevices;
+        
+        for (const normalizedMac of expiredDevices) {
+            this.deviceCache.delete(normalizedMac);
+            this.seenMacsSinceLastPublish.delete(normalizedMac);
+        }
+        
+        return {
+            expiredCount: expiredDevices.length,
+            remainingCount: this.deviceCache.size,
+            expiredMacs: expiredDevices
+        };
     }
 
     /**
@@ -135,22 +159,32 @@ class ScheduledPublisher {
     async performScheduledPublish() {
         logger.info(`Scheduled publish triggered after ${config.mqtt.publishIntervalSeconds} seconds.`);
         
+        const now = Date.now();
+        
+        // Clean up expired devices before publishing
+        const cleanupStats = this.cleanupExpiredDevices(now);
+        if (cleanupStats.expiredCount > 0) {
+            logger.info(`Cleaned up ${cleanupStats.expiredCount} expired devices from cache. ${cleanupStats.remainingCount} devices remain.`, {
+                expiredCount: cleanupStats.expiredCount,
+                remainingCount: cleanupStats.remainingCount,
+                retentionSeconds: this.deviceCacheRetentionMs / 1000
+            });
+        }
+        
         logger.debug(`Before scheduled publish: Cache contains ${this.deviceCache.size} devices, seen ${this.seenMacsSinceLastPublish.size} MACs since last publish.`);
 
         if (this.deviceCache.size > 0) {
             // Publish all cached device data
-            const allDevicePayloads = Array.from(this.deviceCache.values());
+            const allDevicePayloads = Array.from(this.deviceCache.values()).map(entry => entry.data);
             logger.info(`Publishing ${allDevicePayloads.length} cached devices from ${this.deviceCache.size} cache entries.`);
             
             await this.publishDeviceDataCallback(allDevicePayloads, this.lastGatewayMetadata, this.lastGatewayInfo);
 
-            // Clear the device cache after successful publish to prevent unlimited growth
-            this.deviceCache.clear();
-            
-            // Clear the set of seen MACs for the new interval (AFTER successful publish)
+            // DON'T clear the device cache - keep devices for retention period
+            // Only clear the interval tracking
             this.seenMacsSinceLastPublish.clear();
             
-            logger.info(`Scheduled publish completed for ${allDevicePayloads.length} devices. Cache cleared.`);
+            logger.info(`Scheduled publish completed for ${allDevicePayloads.length} devices. Interval tracking reset, cache retained.`);
         } else {
             logger.info('Scheduled publish: No device data in cache to publish.');
             // Still publish gateway status if available
@@ -200,7 +234,8 @@ class ScheduledPublisher {
             seenMacsCount: this.seenMacsSinceLastPublish.size,
             hasScheduledPublish: this.publishTimeout !== null,
             deviceMacs: Array.from(this.deviceCache.keys()),
-            seenMacs: Array.from(this.seenMacsSinceLastPublish)
+            seenMacs: Array.from(this.seenMacsSinceLastPublish),
+            deviceCacheRetentionMs: this.deviceCacheRetentionMs
         };
     }
 

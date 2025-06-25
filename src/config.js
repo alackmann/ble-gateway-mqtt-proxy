@@ -52,6 +52,7 @@ const config = {
         qos: parseInt(process.env.MQTT_QOS) || 1,
         retain: process.env.MQTT_RETAIN === 'true' || false,
         publishIntervalSeconds: parsePublishInterval(),
+        deviceCacheRetentionSeconds: parseInt(process.env.MQTT_DEVICE_CACHE_RETENTION_SECONDS) || 300,
     },
 
     // Logging Configuration
